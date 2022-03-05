@@ -13,6 +13,18 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 # which point to directories outside the build tree to the install RPATH
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+option(WITH_JAVA "Include java and JNI in the build" OFF)
+option(WITH_CSCORE "Build cscore (needs OpenCV)" OFF)
+option(WITH_WPIMATH "Build wpimath" OFF)
+option(WITH_WPILIB "Build hal, wpilibc/j, and myRobot (needs OpenCV)" OFF)
+option(WITH_OLD_COMMANDS "Build old commands" OFF)
+option(WITH_EXAMPLES "Build examples" OFF)
+option(WITH_TESTS "Build unit tests (requires internet connection)" OFF)
+option(WITH_GUI "Build GUI items" OFF)
+option(WITH_SIMULATION_MODULES "Build simulation modules" OFF)
+add_subdirectory(allwpilib)
+
 # Configure and build msquic dependency.
 set(QUIC_TLS "openssl")
 set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
@@ -22,5 +34,6 @@ target_compile_features(inc INTERFACE cxx_std_20)
 
 add_subdirectory(common)
 add_subdirectory(ds)
-add_subdirectory(netcomm)
-add_subdirectory(netcommapp)
+add_subdirectory(dsapp)
+#add_subdirectory(netcomm)
+#add_subdirectory(netcommapp)

@@ -1,3 +1,6 @@
 [submodule "msquic"]
 	path = msquic
 	url = https://github.com/microsoft/msquic
+[submodule "allwpilib"]
+	path = allwpilib
+	url = https://github.com/wpilibsuite/allwpilib

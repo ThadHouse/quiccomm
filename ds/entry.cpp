@@ -1,9 +1,10 @@
 #include "QuicApi.h"
 
 bool InitializeDS() {
-    return ::qapi::InitializeMsQuic();
+    //return ::qapi::InitializeMsQuic("DS");
+    return false;
 }
 
 void FreeDS() {
-    ::qapi::FreeMsQuic();
+    //::qapi::FreeMsQuic();
 }

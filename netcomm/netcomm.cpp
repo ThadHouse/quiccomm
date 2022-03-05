@@ -63,7 +63,7 @@ ListenerCallback(
 }
 
 Netcomm::Netcomm() {
-    if (!::qapi::InitializeMsQuic()) {
+    if (!::qapi::InitializeMsQuic("Hello")) {
         throw std::runtime_error("Failed to load msquic");
     }
 
