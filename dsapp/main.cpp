@@ -1,5 +1,6 @@
 #include "QuicApi.h"
 #include "QuicConnection.h"
+#include <thread>
 
 int main()
 {
@@ -14,6 +15,8 @@ int main()
     handles[1] = conn.GetDisconnectedEvent();
     handles[2] = server.GetReadyEvent();
     handles[3] = server.GetDisconnectedEvent();
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 
     int timedOut = false;
     int signaled = WPI_WaitForObjectsTimeout(handles, 4, triggeredHandles, 25, &timedOut);

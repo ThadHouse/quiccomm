@@ -249,6 +249,8 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
     if (Event->Type == QUIC_CONNECTION_EVENT_CONNECTED) {
         ReadyEvent.Set();
     } else if (Event->Type == QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED) {
+        MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)::StreamCallback, this);
+        Stream = Event->PEER_STREAM_STARTED.Stream;
         ReadyEvent.Set();
     } else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE) {
         DisconnectedEvent.Set();
@@ -267,7 +269,9 @@ QUIC_STATUS QuicConnection::Impl::ListenerCallback(QUIC_LISTENER_EVENT *Event) {
     if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION) {
         MsQuic->ListenerStop(Listener);
         MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)::ConnCallback, this);
-        return MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
+        Connection = Event->NEW_CONNECTION.Connection;
+        QUIC_STATUS Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
+        return Status;
     }
     return QUIC_STATUS_SUCCESS;
 }
