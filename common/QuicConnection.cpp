@@ -9,6 +9,8 @@ struct QuicConnection::Impl
     QuicConnection *Owner = nullptr;
     HQUIC Connection = nullptr;
     HQUIC Stream = nullptr;
+    HQUIC Listener = nullptr;
+    HQUIC Configuration = nullptr;
 
     wpi::Event ReadyEvent;
     wpi::Event DatagramEvent;
@@ -22,6 +24,7 @@ struct QuicConnection::Impl
 
     QUIC_STATUS ConnCallback(QUIC_CONNECTION_EVENT *Event);
     QUIC_STATUS StreamCallback(QUIC_STREAM_EVENT *Event);
+    QUIC_STATUS ListenerCallback(QUIC_LISTENER_EVENT* Event);
 
     ~Impl() noexcept
     {
@@ -34,6 +37,13 @@ struct QuicConnection::Impl
         {
             MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
             MsQuic->ConnectionClose(Connection);
+        }
+        if (Configuration) {
+            MsQuic->ConfigurationClose(Configuration);
+        }
+        if (Listener) {
+            MsQuic->ListenerStop(Listener);
+            MsQuic->ListenerClose(Listener);
         }
     }
 };
@@ -103,12 +113,18 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
     return reinterpret_cast<QuicConnection::Impl *>(Context)->ConnCallback(Event);
 }
 
-const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
+_IRQL_requires_max_(PASSIVE_LEVEL)
+    _Function_class_(QUIC_LISTENER_CALLBACK) static QUIC_STATUS
+    QUIC_API
+    ListenerCallback(
+        _In_ HQUIC,
+        _In_opt_ void *Context,
+        _Inout_ QUIC_LISTENER_EVENT *Event)
+{
+    return reinterpret_cast<QuicConnection::Impl *>(Context)->ListenerCallback(Event);
+}
 
-// QuicConnection::QuicConnection(void *Connection)
-// {
-//     (void)Connection;
-// }
+const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
 
 QuicConnection::QuicConnection(std::string Host, uint16_t Port)
 {
@@ -121,25 +137,12 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
 
     QUIC_SETTINGS Settings;
     Settings.IsSetFlags = 0;
-    Settings.IsSet.PeerBidiStreamCount = 1;
-    Settings.PeerBidiStreamCount = 1;
+    // Settings.IsSet.PeerBidiStreamCount = 1;
+    // Settings.PeerBidiStreamCount = 1;
     Settings.IsSet.KeepAliveIntervalMs = 1;
     Settings.KeepAliveIntervalMs = 1000;
     Settings.IsSet.DatagramReceiveEnabled = 1;
     Settings.DatagramReceiveEnabled = 1;
-
-    struct ConfigWrapper
-    {
-        HQUIC Configuration = nullptr;
-        ~ConfigWrapper() noexcept
-        {
-            if (Configuration)
-            {
-                MsQuic->ConfigurationClose(Configuration);
-            }
-        }
-        operator HQUIC() { return Configuration; }
-    } Configuration;
 
     Status = MsQuic->ConfigurationOpen(
         GetRegistration(),
@@ -148,7 +151,7 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
         &Settings,
         sizeof(Settings),
         nullptr,
-        &Configuration.Configuration);
+        &pImpl->Configuration);
     if (QUIC_FAILED(Status))
     {
         throw std::runtime_error("Failed to open configuration");
@@ -158,7 +161,7 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
     std::memset(&CredConfig, 0, sizeof(CredConfig));
     CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
 
-    Status = MsQuic->ConfigurationLoadCredential(Configuration, &CredConfig);
+    Status = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
     if (QUIC_FAILED(Status))
     {
         throw std::runtime_error("Failed to load credential");
@@ -177,12 +180,68 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
     }
 
     Status = MsQuic->ConnectionStart(pImpl->Connection,
-                                     Configuration, QUIC_ADDRESS_FAMILY_UNSPEC,
+                                     pImpl->Configuration, QUIC_ADDRESS_FAMILY_UNSPEC,
                                      Host.c_str(), Port);
 
     if (QUIC_FAILED(Status))
     {
         throw std::runtime_error("Failed to start connection");
+    }
+}
+
+QuicConnection::QuicConnection(uint16_t Port) {
+    pImpl = std::make_unique<QuicConnection::Impl>(this);
+
+    QUIC_SETTINGS Settings;
+    Settings.IsSetFlags = 0;
+    Settings.IsSet.PeerBidiStreamCount = 1;
+    Settings.PeerBidiStreamCount = 1;
+    // Settings.IsSet.KeepAliveIntervalMs = 1;
+    // Settings.KeepAliveIntervalMs = 1000;
+    Settings.IsSet.DatagramReceiveEnabled = 1;
+    Settings.DatagramReceiveEnabled = 1;
+
+    QUIC_STATUS Status = MsQuic->ConfigurationOpen(
+        GetRegistration(),
+        &Alpn,
+        1,
+        &Settings,
+        sizeof(Settings),
+        nullptr,
+        &pImpl->Configuration);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to open configuration");
+    }
+
+    QUIC_CREDENTIAL_CONFIG CredConfig;
+    std::memset(&CredConfig, 0, sizeof(CredConfig));
+    CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_FILE;
+    QUIC_CERTIFICATE_FILE CertFile;
+    CertFile.CertificateFile = "/Users/thad/GitHub/quiccomm/cert/server.cert";
+    CertFile.PrivateKeyFile = "/Users/thad/GitHub/quiccomm/cert/server.key";
+    CredConfig.CertificateFile = &CertFile;
+
+    Status = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to load credential");
+    }
+
+    Status = MsQuic->ListenerOpen(GetRegistration(), ListenerCallback, pImpl.get(), &pImpl->Listener);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to open listener");
+    }
+
+    QUIC_ADDR LocalAddr;
+    std::memset(&LocalAddr, 0, sizeof(LocalAddr));
+    LocalAddr.Ipv4.sin_port = htons(Port);
+
+    Status = MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &LocalAddr);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to open listener");
     }
 }
 
@@ -200,6 +259,15 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
 QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event) {
     if (Event->Type == QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE) {
         MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+    }
+    return QUIC_STATUS_SUCCESS;
+}
+
+QUIC_STATUS QuicConnection::Impl::ListenerCallback(QUIC_LISTENER_EVENT *Event) {
+    if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION) {
+        MsQuic->ListenerStop(Listener);
+        MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)::ConnCallback, this);
+        return MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
     }
     return QUIC_STATUS_SUCCESS;
 }

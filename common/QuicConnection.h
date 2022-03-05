@@ -11,16 +11,16 @@ namespace qapi
 class QuicConnection {
 public:
 
-    explicit QuicConnection(void* Connection);
+    explicit QuicConnection(uint16_t Port);
     QuicConnection(std::string Host, uint16_t Port);
 
     ~QuicConnection() noexcept;
 
     QuicConnection(const QuicConnection&) = delete;
-    QuicConnection(QuicConnection&&) = default;
+    QuicConnection(QuicConnection&&) = delete;
 
     QuicConnection& operator=(const QuicConnection&) = delete;
-    QuicConnection& operator=(QuicConnection&&) = default;
+    QuicConnection& operator=(QuicConnection&&) = delete;
 
     WPI_EventHandle GetReadyEvent() noexcept;
     WPI_EventHandle GetDatagramEvent() noexcept;
