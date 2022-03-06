@@ -1,5 +1,4 @@
 set (SOURCES
-    entry.cpp
     frcds.cpp
 )
 

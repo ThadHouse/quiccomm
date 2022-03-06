@@ -213,6 +213,7 @@ QuicConnection::QuicConnection(uint16_t Port) {
     Status = MsQuic->ListenerOpen(GetRegistration(), ListenerCallback, pImpl.get(), &pImpl->Listener);
     if (QUIC_FAILED(Status))
     {
+        printf("Failed with status %d\n", (int)Status);
         throw std::runtime_error("Failed to open listener");
     }
 
@@ -223,7 +224,8 @@ QuicConnection::QuicConnection(uint16_t Port) {
     Status = MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &LocalAddr);
     if (QUIC_FAILED(Status))
     {
-        throw std::runtime_error("Failed to open listener");
+        printf("Failed with status %d\n", (int)Status);
+        throw std::runtime_error("Failed to start listener");
     }
 }
 

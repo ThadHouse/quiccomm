@@ -1,108 +1,136 @@
 #include "netcomm.h"
-
+#include "QuicConnection.h"
 #include "QuicApi.h"
-#include <exception>
-#include <atomic>
-#include <mutex>
-#include "remoteconnection.h"
+#include <thread>
+#include <wpi/mutex.h>
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <wpi/SmallVector.h>
 
 using namespace ncom;
 using namespace qapi;
 
-struct Netcomm::Impl {
-    Netcomm* Owner;
-    HQUIC Registration = nullptr;
-    HQUIC Listener = nullptr;
-    HQUIC Configuration = nullptr;
-    std::promise<std::shared_ptr<RemoteConnection>> ConnPromise;
+struct Netcomm::Impl
+{
+    Netcomm *Owner;
+    QuicApi Api{"Netcomm"};
+    QuicConnection Connection{1360};
 
-    std::shared_ptr<RemoteConnection> MakeRemoteConnection(HQUIC ConnHandle) {
-        return Owner->MakeRemoteConnection(ConnHandle);
+    std::thread EventThread;
+    std::atomic_bool ThreadRunning{true};
+    wpi::Event EndThreadEvent;
+    wpi::Event NewDataEvent{true};
+
+    wpi::mutex AppDataMutex;
+
+    void ThreadRun();
+    void HandleNewAppData();
+    void HandleReadyEvent();
+    void HandleStreamData();
+    void HandleDatagramData();
+    void HandleDisconnect();
+
+    Impl(Netcomm *Owner) : Owner{Owner}, EventThread{[&]
+                                                     { ThreadRun(); }}
+    {
     }
 
-    Impl(Netcomm* owner) : Owner{owner} {
-
-    }
-
-    ~Impl() {
-        if (Listener) {
-            MsQuic->ListenerStop(Listener);
-            MsQuic->ListenerClose(Listener);
-        }
-        if (Configuration) {
-            MsQuic->ConfigurationClose(Configuration);
-        }
-        if (Registration) {
-            MsQuic->RegistrationShutdown(Registration, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
-            MsQuic->RegistrationClose(Registration);
+    ~Impl()
+    {
+        ThreadRunning = false;
+        EndThreadEvent.Set();
+        if (EventThread.joinable())
+        {
+            EventThread.join();
         }
     }
 };
 
-_IRQL_requires_max_(PASSIVE_LEVEL)
-_Function_class_(QUIC_LISTENER_CALLBACK)
-static
-QUIC_STATUS
-QUIC_API
-ListenerCallback(
-    _In_ HQUIC Listener,
-    _In_opt_ void* Context,
-    _Inout_ QUIC_LISTENER_EVENT* Event
-    )
+void Netcomm::Impl::ThreadRun()
 {
-    Netcomm::Impl* impl = reinterpret_cast<Netcomm::Impl*>(Context);
-    if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION) {
-        try {
-            impl->ConnPromise.set_value(impl->MakeRemoteConnection(Event->NEW_CONNECTION.Connection));
-        } catch(std::exception&) {
-            return QUIC_STATUS_INTERNAL_ERROR;
+    std::array<WPI_Handle, 6> Events{
+        EndThreadEvent.GetHandle(),
+        NewDataEvent.GetHandle(),
+        Connection.GetDisconnectedEvent(),
+        Connection.GetReadyEvent(),
+        Connection.GetDatagramEvent(),
+        Connection.GetStreamEvent()};
+
+    std::array<WPI_Handle, 6> SignaledEventsStorage;
+    while (ThreadRunning)
+    {
+        const auto SignaledEvents = wpi::WaitForObjects(Events, SignaledEventsStorage);
+
+        for (auto &&i : SignaledEvents)
+        {
+            if (i == Events[0])
+            {
+                break;
+            }
+            else if (i == Events[1])
+            {
+                HandleNewAppData();
+            }
+            else if (i == Events[2])
+            {
+                HandleDisconnect();
+            }
+            else if (i == Events[3])
+            {
+                HandleReadyEvent();
+            }
+            else if (i == Events[4])
+            {
+                HandleDatagramData();
+            }
+            else if (i == Events[5])
+            {
+                HandleStreamData();
+            }
         }
-        MsQuic->ListenerStop(Listener);
     }
-    return QUIC_STATUS_SUCCESS;
 }
 
-Netcomm::Netcomm() {
-    if (!::qapi::InitializeMsQuic("Hello")) {
-        throw std::runtime_error("Failed to load msquic");
-    }
+void Netcomm::Impl::HandleNewAppData()
+{
+}
 
+void Netcomm::Impl::HandleReadyEvent()
+{
+    std::scoped_lock Lock{Owner->EventMutex};
+    Owner->Events.emplace_back(NetcommEvent::ConnectedEvent());
+    Owner->Event.Set();
+}
+
+void Netcomm::Impl::HandleStreamData()
+{
+}
+
+void Netcomm::Impl::HandleDatagramData()
+{
+}
+
+void Netcomm::Impl::HandleDisconnect()
+{
+    std::scoped_lock Lock{Owner->EventMutex};
+    Owner->Events.emplace_back(NetcommEvent::DisconnectedEvent());
+    Owner->Event.Set();
+}
+
+Netcomm::Netcomm()
+{
     pImpl = std::make_unique<Impl>(this);
-
-    const QUIC_REGISTRATION_CONFIG RegConfig = {
-        "Netcomm",
-        QUIC_EXECUTION_PROFILE::QUIC_EXECUTION_PROFILE_LOW_LATENCY
-    };
-
-    QUIC_STATUS Status = MsQuic->RegistrationOpen(&RegConfig, &pImpl->Registration);
-
-    if (QUIC_FAILED(Status)) {
-        throw std::runtime_error("Failed to open registration");
-    }
-
-    Status = MsQuic->ListenerOpen(pImpl->Registration, ListenerCallback, this->pImpl.get(), &pImpl->Listener);
-
-    if (QUIC_FAILED(Status)) {
-        throw std::runtime_error("Failed to open listener");
-    }
 }
 
-Netcomm::~Netcomm() noexcept {
-    pImpl = nullptr;
-    ::qapi::FreeMsQuic();
+Netcomm::~Netcomm() noexcept
+{
 }
 
-const QUIC_BUFFER Alpn = { sizeof("frc") - 1, (uint8_t*)"frc" };
-
-std::future<std::shared_ptr<RemoteConnection>> Netcomm::StartListener() {
-    QUIC_ADDR Addr = {0};
-    Addr.Ipv4.sin_port = htons(1188);
-    MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &Addr);
-    printf("Listener started\n");
-    pImpl->ConnPromise = {};
-    return pImpl->ConnPromise.get_future();
+NetcommEvent NetcommEvent::ConnectedEvent() noexcept
+{
+    return NetcommEvent{NETCOMM_Event_Connected};
 }
 
-std::shared_ptr<RemoteConnection> Netcomm::MakeRemoteConnection(void* ConnHandle) {
-    return std::make_shared<RemoteConnection>(RemoteConnection::private_init{}, ConnHandle);
+NetcommEvent NetcommEvent::DisconnectedEvent() noexcept
+{
+    return NetcommEvent{NETCOMM_Event_Disconnected};
 }

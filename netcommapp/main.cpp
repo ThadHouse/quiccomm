@@ -1,14 +1,33 @@
 #include "netcomm.h"
-#include "remoteconnection.h"
 
 using namespace ncom;
 
 int main(){
     Netcomm netcomm;
-    auto future = netcomm.StartListener();
-    if (future.wait_for(std::chrono::seconds(2)) == std::future_status::timeout) {
-        printf("Timed out\n");
-        return 1;
+    std::vector<NETCOMM_Event> events;
+
+    while (true) {
+        printf("Starting loop\n");
+        Netcomm netcomm;
+        auto handle = netcomm.GetEventHandle();
+        bool exitLoop = false;
+        while (!exitLoop) {
+            bool signaled = wpi::WaitForObject(handle);
+            if (signaled) {
+
+                netcomm.GetEvents(events);
+                for (auto&& event : events) {
+                    switch (event.Type) {
+                        case NETCOMM_Event_Connected:
+                        printf("Connected\n");
+                        break;
+                        case NETCOMM_Event_Disconnected:
+                        printf("Disconnected\n");
+                        exitLoop = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
-    auto conn = future.get();
 }

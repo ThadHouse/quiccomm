@@ -1,6 +1,5 @@
 set (SOURCES
     netcomm.cpp
-    remoteconnection.cpp
 )
 
 add_library(frcnetcomm SHARED ${SOURCES})
