@@ -12,6 +12,7 @@ namespace qapi
     struct DatagramBuffer
     {
         std::unique_ptr<uint8_t[]> Buffer;
+        uint64_t Timestamp;
         uint32_t Length;
     };
 

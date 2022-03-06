@@ -105,16 +105,21 @@ void Netcomm::Impl::HandleStreamData()
 {
     std::vector<uint8_t> StreamData;
     Connection.GetStreamData(StreamData);
-    printf("Handled stream %d %d\n", (int)StreamData.size(), StreamData[0]);
+    //printf("Handled stream %d %d\n", (int)StreamData.size(), StreamData[0]);
 }
 
 void Netcomm::Impl::HandleDatagramData()
 {
     std::vector<DatagramBuffer> Datagrams;
     Connection.GetDatagramData(Datagrams);
-    for (auto&& dg : Datagrams) {
-        printf("Handled datagram %d %d\n", dg.Length, dg.Buffer[0]);
+    if (Datagrams.empty()) {
+        return;
     }
+    std::scoped_lock Lock{Owner->EventMutex};
+    for (auto&& dg : Datagrams) {
+        Owner->Events.emplace_back(NetcommEvent::DatagramReceivedEvent(dg.Timestamp));
+    }
+    Owner->Event.Set();
 }
 
 void Netcomm::Impl::HandleDisconnect()
@@ -141,4 +146,11 @@ NetcommEvent NetcommEvent::ConnectedEvent() noexcept
 NetcommEvent NetcommEvent::DisconnectedEvent() noexcept
 {
     return NetcommEvent{NETCOMM_Event_Disconnected};
+}
+
+NetcommEvent NetcommEvent::DatagramReceivedEvent(uint64_t Timestamp) noexcept
+{
+    auto Event = NetcommEvent{NETCOMM_Event_DatagramReceived};
+    Event.Timestamp = Timestamp;
+    return Event;
 }

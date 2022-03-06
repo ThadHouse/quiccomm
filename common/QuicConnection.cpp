@@ -2,6 +2,7 @@
 #include "QuicApi.h"
 #include "QuicApiInternal.h"
 #include <wpi/mutex.h>
+#include <wpi/timestamp.h>
 
 using namespace qapi;
 
@@ -169,6 +170,20 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
         throw std::runtime_error("Failed to load credential");
     }
 
+    BOOLEAN value = TRUE;
+        Status =
+            MsQuic->SetParam(
+                pImpl->Connection,
+                QUIC_PARAM_CONN_DISABLE_1RTT_ENCRYPTION,
+                sizeof(value),
+                &value);
+
+                if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to disable encryption");
+    }
+
+
     Status = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, StreamCallback, pImpl.get(), &pImpl->Stream);
     if (QUIC_FAILED(Status))
     {
@@ -274,6 +289,7 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
         DatagramBuffer datagram;
         datagram.Length = Event->DATAGRAM_RECEIVED.Buffer->Length;
         datagram.Buffer = std::make_unique<uint8_t[]>(datagram.Length);
+        datagram.Timestamp = wpi::Now();
         std::memcpy(datagram.Buffer.get(), Event->DATAGRAM_RECEIVED.Buffer->Buffer, datagram.Length);
         std::scoped_lock Lock{Owner->DatagramMutex};
         Owner->DatagramData.emplace_back(std::move(datagram));
@@ -304,6 +320,12 @@ QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event) {
 QUIC_STATUS QuicConnection::Impl::ListenerCallback(QUIC_LISTENER_EVENT *Event) {
     if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION) {
         MsQuic->ListenerStop(Listener);
+        BOOLEAN value = TRUE;
+        MsQuic->SetParam(
+            Event->NEW_CONNECTION.Connection,
+            QUIC_PARAM_CONN_DISABLE_1RTT_ENCRYPTION,
+            sizeof(value),
+            &value);
         MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)::ConnCallback, this);
         Connection = Event->NEW_CONNECTION.Connection;
         QUIC_STATUS Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);

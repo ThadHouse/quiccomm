@@ -41,4 +41,7 @@ namespace qapi
         }
     }
 
+    const QUIC_API_TABLE* GetApiTable() {
+        return MsQuic;
+    }
 }

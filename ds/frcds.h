@@ -49,6 +49,8 @@ namespace ds
 
         void SendGameData();
 
+        uint32_t GetRtt() noexcept;
+
         WPI_EventHandle GetEventHandle()
         {
             return Event.GetHandle();

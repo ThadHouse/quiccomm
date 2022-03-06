@@ -5,6 +5,7 @@
 #include <wpi/mutex.h>
 #include <fmt/format.h>
 #include <wpi/timestamp.h>
+#include <QuicApiInternal.h>
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <wpi/SmallVector.h>
 
@@ -136,7 +137,6 @@ void DriverStation::Impl::ThreadRun()
                 HandleTeamNumberChange();
                 break;
             } else if (i == AckDisconnectEvent.GetHandle()) {
-                printf("Received Ack In thread %p\n", CurrentConnectionInternal);
                 if (CurrentConnectionInternal == nullptr) {
                     CurrentConnection = nullptr;
                 }
@@ -335,4 +335,16 @@ void DriverStation::SendGameData() {
     Data[0] = gdCount;
     gdCount++;
     pImpl->CurrentConnection->WriteStream(Data);
+}
+
+
+uint32_t DriverStation::GetRtt() noexcept{
+    if (!pImpl->CurrentConnection) {
+        return 0;
+    }
+    QUIC_STATISTICS_V2 Stats;
+    Stats.Rtt = 0;
+    uint32_t StatsLen = sizeof(Stats);
+    qapi::GetApiTable()->GetParam((HQUIC)pImpl->CurrentConnection->GetConnectionHandle(), QUIC_PARAM_CONN_STATISTICS_V2, &StatsLen, &Stats);
+    return Stats.Rtt;
 }

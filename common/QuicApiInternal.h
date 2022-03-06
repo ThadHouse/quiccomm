@@ -10,4 +10,6 @@ extern const QUIC_API_TABLE* MsQuic;
 
 HQUIC GetRegistration();
 
+const QUIC_API_TABLE* GetApiTable();
+
 }

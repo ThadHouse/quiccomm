@@ -16,6 +16,8 @@ int main()
 
     auto start = wpi::Now();
 
+    int count = 0;
+
     while (true) {
         if (hasConnection) {
             bool TimedOut = false;
@@ -56,6 +58,11 @@ SendData:
         if (hasConnection) {
             ds.SendControlPacket();
             ds.SendGameData();
+            count++;
+            if (count == 50) {
+                count = 0;
+                printf("Rtt %d\n", (int)ds.GetRtt());
+            }
         }
     }
 

@@ -8,12 +8,14 @@
 typedef enum NETCOMM_EventType
 {
     NETCOMM_Event_Disconnected,
-    NETCOMM_Event_Connected
+    NETCOMM_Event_Connected,
+    NETCOMM_Event_DatagramReceived
 } NETCOMM_EventType;
 
 typedef struct NETCOMM_Event
 {
     int32_t Type;
+    uint64_t Timestamp;
 } NETCOMM_Event;
 
 namespace ncom
@@ -23,6 +25,7 @@ namespace ncom
     public:
         static NetcommEvent DisconnectedEvent() noexcept;
         static NetcommEvent ConnectedEvent() noexcept;
+        static NetcommEvent DatagramReceivedEvent(uint64_t Timestamp) noexcept;
 
     private:
         explicit NetcommEvent(NETCOMM_EventType EventType)
@@ -51,8 +54,6 @@ namespace ncom
             Events.swap(CachedEvents);
             Events.clear();
         }
-
-
 
     private:
     struct Impl;
