@@ -12,11 +12,6 @@ struct QuicConnection::Impl
     HQUIC Listener = nullptr;
     HQUIC Configuration = nullptr;
 
-    wpi::Event ReadyEvent;
-    wpi::Event DatagramEvent;
-    wpi::Event StreamEvent;
-    wpi::Event DisconnectedEvent;
-
     Impl(QuicConnection *Ownr)
         : Owner{Ownr}
     {
@@ -52,25 +47,6 @@ QuicConnection::~QuicConnection() noexcept
 {
 }
 
-WPI_EventHandle QuicConnection::GetReadyEvent() noexcept {
-    return pImpl->ReadyEvent.GetHandle();
-}
-
-WPI_EventHandle QuicConnection::GetDatagramEvent() noexcept
-{
-    return pImpl->DatagramEvent.GetHandle();
-}
-
-WPI_EventHandle QuicConnection::GetStreamEvent() noexcept
-{
-    return pImpl->StreamEvent.GetHandle();
-}
-
-WPI_EventHandle QuicConnection::GetDisconnectedEvent() noexcept
-{
-    return pImpl->DisconnectedEvent.GetHandle();
-}
-
 void *QuicConnection::GetStreamHandle() noexcept
 {
     return pImpl->Stream;
@@ -99,6 +75,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_STREAM_EVENT *Event)
 {
+    printf("Stream Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->StreamCallback(Event);
 }
 
@@ -110,6 +87,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_CONNECTION_EVENT *Event)
 {
+    printf("Connection Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->ConnCallback(Event);
 }
 
@@ -121,6 +99,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_LISTENER_EVENT *Event)
 {
+    printf("Listener Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->ListenerCallback(Event);
 }
 
@@ -128,6 +107,7 @@ const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
 
 QuicConnection::QuicConnection(std::string Host, uint16_t Port)
 {
+    printf("Starting client connection\n");
     pImpl = std::make_unique<QuicConnection::Impl>(this);
     QUIC_STATUS Status = MsQuic->ConnectionOpen(GetRegistration(), ConnCallback, pImpl.get(), &pImpl->Connection);
     if (QUIC_FAILED(Status))
@@ -143,6 +123,8 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
     Settings.KeepAliveIntervalMs = 1000;
     Settings.IsSet.DatagramReceiveEnabled = 1;
     Settings.DatagramReceiveEnabled = 1;
+    Settings.IsSet.IdleTimeoutMs = 1;
+    Settings.IdleTimeoutMs = 2000;
 
     Status = MsQuic->ConfigurationOpen(
         GetRegistration(),
@@ -245,15 +227,42 @@ QuicConnection::QuicConnection(uint16_t Port) {
     }
 }
 
+QuicConnection::QuicConnection() noexcept = default;
+
+QuicConnection::QuicConnection(QuicConnection&& other) noexcept {
+    pImpl = std::move(other.pImpl);
+    ReadyEvent = std::move(other.ReadyEvent);
+    DatagramEvent = std::move(other.DatagramEvent);
+    StreamEvent = std::move(other.StreamEvent);
+    DisconnectedEvent = std::move(other.DisconnectedEvent);
+    pImpl->Owner = this;
+}
+
+QuicConnection& QuicConnection::operator=(QuicConnection&& other) noexcept {
+    pImpl = std::move(other.pImpl);
+    ReadyEvent = std::move(other.ReadyEvent);
+    DatagramEvent = std::move(other.DatagramEvent);
+    StreamEvent = std::move(other.StreamEvent);
+    DisconnectedEvent = std::move(other.DisconnectedEvent);
+    pImpl->Owner = this;
+    return *this;
+}
+
+void QuicConnection::Disconnect() {
+    if (pImpl->Stream) {
+        MsQuic->StreamShutdown(pImpl->Stream, QUIC_STREAM_SHUTDOWN_FLAG_NONE, 0);
+    }
+}
+
 QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
     if (Event->Type == QUIC_CONNECTION_EVENT_CONNECTED) {
-        ReadyEvent.Set();
+        Owner->ReadyEvent.Set();
     } else if (Event->Type == QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED) {
         MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)::StreamCallback, this);
         Stream = Event->PEER_STREAM_STARTED.Stream;
-        ReadyEvent.Set();
+        Owner->ReadyEvent.Set();
     } else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE) {
-        DisconnectedEvent.Set();
+        Owner->DisconnectedEvent.Set();
     }
     return QUIC_STATUS_SUCCESS;
 }
