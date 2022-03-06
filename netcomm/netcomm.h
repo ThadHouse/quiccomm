@@ -52,9 +52,10 @@ namespace ncom
             Events.clear();
         }
 
-        struct Impl;
+
 
     private:
+    struct Impl;
         wpi::Event Event{true};
         std::vector<NETCOMM_Event> Events;
         wpi::mutex EventMutex;

@@ -2,10 +2,63 @@
 #include "QuicConnection.h"
 #include <thread>
 #include "frcds.h"
+#include "wpi/timestamp.h"
 
 int main()
 {
     ds::DriverStation ds;
+    ds.SetHostname("localhost");
+
+    auto event = ds.GetEventHandle();
+
+    bool hasConnection = true;
+    std::vector<DS_Event> Events;
+
+    auto start = wpi::Now();
+
+    while (true) {
+        if (hasConnection) {
+            bool TimedOut = false;
+            auto elapsedTime = wpi::Now() - start;
+            uint64_t waitTime = 20000 - elapsedTime;
+            if (elapsedTime > 20000) {
+                waitTime = 0;
+            }
+            bool Signaled = wpi::WaitForObject(event, waitTime / (double)1e6, &TimedOut);
+            start = wpi::Now();
+            if (!Signaled) {
+                goto SendData;
+            }
+        } else {
+            if (!wpi::WaitForObject(event)) {
+                continue;
+            }
+        }
+        ds.GetEvents(Events);
+        for(auto&& event : Events) {
+            switch (event.Type)
+            {
+            case DS_Event_Connected:
+                hasConnection = true;
+                break;
+
+            case DS_Event_Disconnected:
+                printf("Received Disconnected event\n");
+                hasConnection = false;
+                ds.AckDisconnect();
+                break;
+
+            default:
+                break;
+            }
+        }
+SendData:
+        if (hasConnection) {
+            ds.SendControlPacket();
+            ds.SendGameData();
+        }
+    }
+
     std::this_thread::sleep_for(std::chrono::seconds(100));
     // qapi::QuicApi api{"DriverStation"};
     // qapi::QuicConnection server{9999};

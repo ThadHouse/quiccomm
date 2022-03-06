@@ -3,23 +3,70 @@
 #include <memory>
 #include <wpi/Synchronization.h>
 #include <vector>
+#include <wpi/mutex.h>
 
-namespace ds {
-struct DSEvent;
+typedef enum DS_EventType
+{
+    DS_Event_Disconnected,
+    DS_Event_Connected
+} DS_EventType;
 
-class DriverStation {
-public:
-    DriverStation();
-    ~DriverStation() noexcept;
+typedef struct DS_Event
+{
+    int32_t Type;
+} DS_Event;
 
-    void SetTeamNumber(int teamNumber);
-    void SetHostname(std::string host);
+namespace ds
+{
 
-    WPI_EventHandle GetEventHandle();
-    std::vector<std::unique_ptr<DSEvent>> GetEvents();
+    class DsEvent : public DS_Event
+    {
+    public:
+        static DsEvent DisconnectedEvent() noexcept;
+        static DsEvent ConnectedEvent() noexcept;
 
-private:
-struct Impl;
-std::unique_ptr<Impl> pImpl;
-};
+    private:
+        explicit DsEvent(DS_EventType EventType)
+        {
+            Type = EventType;
+        }
+    };
+
+    static_assert(sizeof(DsEvent) == sizeof(DS_Event));
+
+    class DriverStation
+    {
+    public:
+        DriverStation();
+        ~DriverStation() noexcept;
+
+        void SetTeamNumber(int teamNumber);
+        void SetHostname(std::string host);
+
+        void AckDisconnect();
+
+        void SendControlPacket();
+
+        void SendGameData();
+
+        WPI_EventHandle GetEventHandle()
+        {
+            return Event.GetHandle();
+        }
+
+        void GetEvents(std::vector<DS_Event> &CachedEvents)
+        {
+            std::scoped_lock Lock{EventMutex};
+            Event.Reset();
+            Events.swap(CachedEvents);
+            Events.clear();
+        }
+
+    private:
+        struct Impl;
+        wpi::Event Event{true};
+        std::vector<DS_Event> Events;
+        wpi::mutex EventMutex;
+        std::unique_ptr<Impl> pImpl;
+    };
 }

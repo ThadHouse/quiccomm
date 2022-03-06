@@ -1,6 +1,7 @@
 #include "QuicConnection.h"
 #include "QuicApi.h"
 #include "QuicApiInternal.h"
+#include <wpi/mutex.h>
 
 using namespace qapi;
 
@@ -11,6 +12,9 @@ struct QuicConnection::Impl
     HQUIC Stream = nullptr;
     HQUIC Listener = nullptr;
     HQUIC Configuration = nullptr;
+
+    wpi::mutex DatagramMutex;
+    wpi::mutex StreamMutex;
 
     Impl(QuicConnection *Ownr)
         : Owner{Ownr}
@@ -59,12 +63,28 @@ void *QuicConnection::GetConnectionHandle() noexcept
 
 void QuicConnection::WriteDatagram(wpi::span<uint8_t> datagram)
 {
-    (void)datagram;
+    QUIC_BUFFER* Buffer = (QUIC_BUFFER*)malloc(sizeof(QUIC_BUFFER) + datagram.size());
+    Buffer->Buffer = (uint8_t*)(Buffer + 1);
+    Buffer->Length = datagram.size();
+    std::memcpy(Buffer->Buffer, datagram.data(), datagram.size());
+    QUIC_STATUS Status = MsQuic->DatagramSend(pImpl->Connection, Buffer, 1, QUIC_SEND_FLAG_DGRAM_PRIORITY, Buffer);
+    if (QUIC_FAILED(Status)) {
+        printf("Datagram failed to send\n");
+        free(Buffer);
+    }
 }
 
 void QuicConnection::WriteStream(wpi::span<uint8_t> data)
 {
-    (void)data;
+    QUIC_BUFFER* Buffer = (QUIC_BUFFER*)malloc(sizeof(QUIC_BUFFER) + data.size());
+    Buffer->Buffer = (uint8_t*)(Buffer + 1);
+    Buffer->Length = data.size();
+    std::memcpy(Buffer->Buffer, data.data(), data.size());
+    QUIC_STATUS Status = MsQuic->StreamSend(pImpl->Stream, Buffer, 1, QUIC_SEND_FLAG_NONE, Buffer);
+    if (QUIC_FAILED(Status)) {
+        printf("Stream failed to send\n");
+        free(Buffer);
+    }
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -75,7 +95,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_STREAM_EVENT *Event)
 {
-    printf("Stream Callback %d\n", Event->Type);
+    //printf("Stream Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->StreamCallback(Event);
 }
 
@@ -87,7 +107,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_CONNECTION_EVENT *Event)
 {
-    printf("Connection Callback %d\n", Event->Type);
+    //printf("Connection Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->ConnCallback(Event);
 }
 
@@ -99,7 +119,7 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
         _In_opt_ void *Context,
         _Inout_ QUIC_LISTENER_EVENT *Event)
 {
-    printf("Listener Callback %d\n", Event->Type);
+    //printf("Listener Callback %d\n", Event->Type);
     return reinterpret_cast<QuicConnection::Impl *>(Context)->ListenerCallback(Event);
 }
 
@@ -182,6 +202,8 @@ QuicConnection::QuicConnection(uint16_t Port) {
     // Settings.KeepAliveIntervalMs = 1000;
     Settings.IsSet.DatagramReceiveEnabled = 1;
     Settings.DatagramReceiveEnabled = 1;
+    Settings.IsSet.IdleTimeoutMs = 1;
+    Settings.IdleTimeoutMs = 2000;
 
     QUIC_STATUS Status = MsQuic->ConfigurationOpen(
         GetRegistration(),
@@ -231,25 +253,6 @@ QuicConnection::QuicConnection(uint16_t Port) {
 
 QuicConnection::QuicConnection() noexcept = default;
 
-QuicConnection::QuicConnection(QuicConnection&& other) noexcept {
-    pImpl = std::move(other.pImpl);
-    ReadyEvent = std::move(other.ReadyEvent);
-    DatagramEvent = std::move(other.DatagramEvent);
-    StreamEvent = std::move(other.StreamEvent);
-    DisconnectedEvent = std::move(other.DisconnectedEvent);
-    pImpl->Owner = this;
-}
-
-QuicConnection& QuicConnection::operator=(QuicConnection&& other) noexcept {
-    pImpl = std::move(other.pImpl);
-    ReadyEvent = std::move(other.ReadyEvent);
-    DatagramEvent = std::move(other.DatagramEvent);
-    StreamEvent = std::move(other.StreamEvent);
-    DisconnectedEvent = std::move(other.DisconnectedEvent);
-    pImpl->Owner = this;
-    return *this;
-}
-
 void QuicConnection::Disconnect() {
     if (pImpl->Stream) {
         MsQuic->StreamShutdown(pImpl->Stream, QUIC_STREAM_SHUTDOWN_FLAG_NONE, 0);
@@ -258,13 +261,27 @@ void QuicConnection::Disconnect() {
 
 QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
     if (Event->Type == QUIC_CONNECTION_EVENT_CONNECTED) {
-        Owner->ReadyEvent.Set();
+        if (Stream != nullptr) {
+            Owner->ReadyEvent.Set();
+        }
     } else if (Event->Type == QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED) {
         MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)::StreamCallback, this);
         Stream = Event->PEER_STREAM_STARTED.Stream;
         Owner->ReadyEvent.Set();
     } else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE) {
         Owner->DisconnectedEvent.Set();
+    } else if (Event->Type == QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED) {
+        DatagramBuffer datagram;
+        datagram.Length = Event->DATAGRAM_RECEIVED.Buffer->Length;
+        datagram.Buffer = std::make_unique<uint8_t[]>(datagram.Length);
+        std::memcpy(datagram.Buffer.get(), Event->DATAGRAM_RECEIVED.Buffer->Buffer, datagram.Length);
+        std::scoped_lock Lock{Owner->DatagramMutex};
+        Owner->DatagramData.emplace_back(std::move(datagram));
+        Owner->DatagramEvent.Set();
+    } else if (Event->Type == QUIC_CONNECTION_EVENT_DATAGRAM_SEND_STATE_CHANGED) {
+        if (QUIC_DATAGRAM_SEND_STATE_IS_FINAL(Event->DATAGRAM_SEND_STATE_CHANGED.State)) {
+            free(Event->DATAGRAM_SEND_STATE_CHANGED.ClientContext);
+        }
     }
     return QUIC_STATUS_SUCCESS;
 }
@@ -272,6 +289,14 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event) {
 QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event) {
     if (Event->Type == QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE) {
         MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+    } else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE) {
+        std::scoped_lock Lock{Owner->StreamMutex};
+        for (uint32_t i = 0; i < Event->RECEIVE.BufferCount; i++) {
+            Owner->StreamData.insert(Owner->StreamData.end(), Event->RECEIVE.Buffers[i].Buffer, Event->RECEIVE.Buffers[i].Buffer + Event->RECEIVE.Buffers[i].Length);
+        }
+        Owner->StreamEvent.Set();
+    } else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE) {
+        free(Event->SEND_COMPLETE.ClientContext);
     }
     return QUIC_STATUS_SUCCESS;
 }

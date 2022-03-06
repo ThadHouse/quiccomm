@@ -103,10 +103,18 @@ void Netcomm::Impl::HandleReadyEvent()
 
 void Netcomm::Impl::HandleStreamData()
 {
+    std::vector<uint8_t> StreamData;
+    Connection.GetStreamData(StreamData);
+    printf("Handled stream %d %d\n", (int)StreamData.size(), StreamData[0]);
 }
 
 void Netcomm::Impl::HandleDatagramData()
 {
+    std::vector<DatagramBuffer> Datagrams;
+    Connection.GetDatagramData(Datagrams);
+    for (auto&& dg : Datagrams) {
+        printf("Handled datagram %d %d\n", dg.Length, dg.Buffer[0]);
+    }
 }
 
 void Netcomm::Impl::HandleDisconnect()

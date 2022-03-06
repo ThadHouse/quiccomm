@@ -3,7 +3,6 @@
 using namespace ncom;
 
 int main(){
-    Netcomm netcomm;
     std::vector<NETCOMM_Event> events;
 
     while (true) {
