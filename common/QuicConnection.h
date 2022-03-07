@@ -19,7 +19,7 @@ namespace qapi
     class QuicConnection
     {
     public:
-        QuicConnection() noexcept;
+        QuicConnection();
         explicit QuicConnection(uint16_t Port);
         QuicConnection(std::string Host, uint16_t Port);
 

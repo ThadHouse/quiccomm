@@ -28,9 +28,8 @@ add_subdirectory(allwpilib)
 # Configure and build msquic dependency.
 set(QUIC_TLS "openssl")
 set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
-set(CMAKE_BUILD_TYPE "Release")
 add_subdirectory(msquic)
-target_compile_features(inc INTERFACE cxx_std_20)
+target_compile_features(inc INTERFACE cxx_std_17)
 
 add_subdirectory(common)
 add_subdirectory(ds)

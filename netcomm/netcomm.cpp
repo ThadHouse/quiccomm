@@ -2,6 +2,7 @@
 #include "QuicConnection.h"
 #include "QuicApi.h"
 #include <thread>
+#include <atomic>
 #include <wpi/mutex.h>
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <wpi/SmallVector.h>

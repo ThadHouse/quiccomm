@@ -1,5 +1,7 @@
 #include "QuicApi.h"
 #include "QuicApiInternal.h"
+#include <stdexcept>
+#include <cstring>
 
 namespace qapi
 {

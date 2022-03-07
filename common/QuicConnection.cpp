@@ -3,6 +3,7 @@
 #include "QuicApiInternal.h"
 #include <wpi/mutex.h>
 #include <wpi/timestamp.h>
+#include <cstring>
 
 using namespace qapi;
 
@@ -270,7 +271,7 @@ QuicConnection::QuicConnection(uint16_t Port)
     }
 }
 
-QuicConnection::QuicConnection() noexcept = default;
+QuicConnection::QuicConnection() = default;
 
 void QuicConnection::Disconnect()
 {

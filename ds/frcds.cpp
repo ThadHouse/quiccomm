@@ -4,6 +4,7 @@
 #include <thread>
 #include <wpi/mutex.h>
 #include <fmt/format.h>
+#include <atomic>
 #include <wpi/timestamp.h>
 #include <QuicApiInternal.h>
 #pragma GCC diagnostic ignored "-Wunused-parameter"
