@@ -9,7 +9,7 @@ int main()
     ds::DriverStation ds;
     ds.SetHostname("localhost");
 
-    auto event = ds.GetEventHandle();
+    auto EventHandle = ds.GetEventHandle();
 
     bool hasConnection = true;
     std::vector<DS_Event> Events;
@@ -26,13 +26,13 @@ int main()
             if (elapsedTime > 20000) {
                 waitTime = 0;
             }
-            bool Signaled = wpi::WaitForObject(event, waitTime / (double)1e6, &TimedOut);
+            bool Signaled = wpi::WaitForObject(EventHandle, waitTime / (double)1e6, &TimedOut);
             start = wpi::Now();
             if (!Signaled) {
                 goto SendData;
             }
         } else {
-            if (!wpi::WaitForObject(event)) {
+            if (!wpi::WaitForObject(EventHandle)) {
                 continue;
             }
         }

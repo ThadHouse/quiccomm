@@ -7,7 +7,11 @@
 #include <atomic>
 #include <wpi/timestamp.h>
 #include <QuicApiInternal.h>
+#ifndef _MSC_VER
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#else
+#pragma warning(disable:4458)
+#endif
 #include <wpi/SmallVector.h>
 
 using namespace ds;

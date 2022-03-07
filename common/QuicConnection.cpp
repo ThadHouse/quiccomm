@@ -69,7 +69,7 @@ void QuicConnection::WriteDatagram(wpi::span<uint8_t> datagram)
 {
     QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + datagram.size());
     Buffer->Buffer = (uint8_t *)(Buffer + 1);
-    Buffer->Length = datagram.size();
+    Buffer->Length = (uint32_t)datagram.size();
     std::memcpy(Buffer->Buffer, datagram.data(), datagram.size());
     QUIC_STATUS Status = MsQuic->DatagramSend(pImpl->Connection, Buffer, 1, QUIC_SEND_FLAG_DGRAM_PRIORITY, Buffer);
     if (QUIC_FAILED(Status))
@@ -83,7 +83,7 @@ void QuicConnection::WriteStream(wpi::span<uint8_t> data)
 {
     QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + data.size());
     Buffer->Buffer = (uint8_t *)(Buffer + 1);
-    Buffer->Length = data.size();
+    Buffer->Length = (uint32_t)data.size();
     std::memcpy(Buffer->Buffer, data.data(), data.size());
     QUIC_STATUS Status = MsQuic->StreamSend(pImpl->Stream, Buffer, 1, QUIC_SEND_FLAG_NONE, Buffer);
     if (QUIC_FAILED(Status))
@@ -261,7 +261,7 @@ QuicConnection::QuicConnection(uint16_t Port)
 
     QUIC_ADDR LocalAddr;
     std::memset(&LocalAddr, 0, sizeof(LocalAddr));
-    LocalAddr.Ipv4.sin_port = htons(Port);
+    LocalAddr.Ipv4.sin_port = QuicNetByteSwapShort(Port);
 
     Status = MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &LocalAddr);
     if (QUIC_FAILED(Status))

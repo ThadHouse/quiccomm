@@ -4,7 +4,11 @@
 #include <thread>
 #include <atomic>
 #include <wpi/mutex.h>
+#ifndef _MSC_VER
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#else
+#pragma warning(disable:4458)
+#endif
 #include <wpi/SmallVector.h>
 
 using namespace ncom;

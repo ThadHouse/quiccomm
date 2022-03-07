@@ -13,6 +13,12 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 # which point to directories outside the build tree to the install RPATH
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+# Configure and build msquic dependency.
+set(QUIC_TLS "openssl")
+set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
+add_subdirectory(msquic)
+target_compile_features(inc INTERFACE cxx_std_17)
+
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 option(WITH_JAVA "Include java and JNI in the build" OFF)
 option(WITH_CSCORE "Build cscore (needs OpenCV)" OFF)
@@ -25,11 +31,7 @@ option(WITH_GUI "Build GUI items" OFF)
 option(WITH_SIMULATION_MODULES "Build simulation modules" OFF)
 add_subdirectory(allwpilib)
 
-# Configure and build msquic dependency.
-set(QUIC_TLS "openssl")
-set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
-add_subdirectory(msquic)
-target_compile_features(inc INTERFACE cxx_std_17)
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 add_subdirectory(common)
 add_subdirectory(ds)
