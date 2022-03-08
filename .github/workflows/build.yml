@@ -61,7 +61,7 @@ jobs:
           build/**/*.dylib
           build/**/netcommapp
           build/**/dsapp
-  build-macos-x64:
+  build-macos-arm64:
     permissions:
       contents: read
     name: Build macOS (arm64)

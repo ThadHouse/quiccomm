@@ -26,7 +26,7 @@ option(QUIC_SHARED_EC "Use shared execution contexts between QUIC and UDP" ON)
 add_subdirectory(msquic)
 target_compile_features(inc INTERFACE cxx_std_17)
 
-
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(WITH_JAVA "Include java and JNI in the build" OFF)
 option(WITH_CSCORE "Build cscore (needs OpenCV)" OFF)
 option(WITH_WPIMATH "Build wpimath" OFF)
