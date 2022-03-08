@@ -24,7 +24,7 @@ jobs:
       with:
         submodules: 'recursive'
     - name: Generate
-      run: mkdir build && cd build && cmake -G 'Unix Makefiles' -DMSH3_TOOL=on ..
+      run: mkdir build && cd build && cmake -G 'Unix Makefiles' ..
     - name: Build
       run: cd build && cmake --build .
     - name: Upload
@@ -35,10 +35,58 @@ jobs:
           build/**/*.so
           build/**/netcommapp
           build/**/dsapp
-    - name: Install
-      run: cd build && sudo cmake --install . --config Debug
-    - name: Run
-      run: /usr/local/lib/msh3app
+  build-macos-x64:
+    permissions:
+      contents: read
+    name: Build macOS (x64)
+    runs-on: macos-latest
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@bdb12b622a910dfdc99a31fdfe6f45a16bc287a4
+      with:
+        egress-policy: audit
+    - name: Checkout repository
+      uses: actions/checkout@629c2de402a417ea7690ca6ce3f33229e27606a5
+      with:
+        submodules: 'recursive'
+    - name: Generate
+      run: mkdir build && cd build && cmake -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET="10.15" ..
+    - name: Build
+      run: cd build && cmake --build .
+    - name: Upload
+      uses: actions/upload-artifact@6673cd052c4cd6fcf4b4e6e60ea986c889389535
+      with:
+        name: bin-macos-x64
+        path: |
+          build/**/*.dylib
+          build/**/netcommapp
+          build/**/dsapp
+  build-macos-x64:
+    permissions:
+      contents: read
+    name: Build macOS (arm64)
+    runs-on: macos-latest
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@bdb12b622a910dfdc99a31fdfe6f45a16bc287a4
+      with:
+        egress-policy: audit
+    - name: Checkout repository
+      uses: actions/checkout@629c2de402a417ea7690ca6ce3f33229e27606a5
+      with:
+        submodules: 'recursive'
+    - name: Generate
+      run: mkdir build && cd build && cmake -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" ..
+    - name: Build
+      run: cd build && cmake --build .
+    - name: Upload
+      uses: actions/upload-artifact@6673cd052c4cd6fcf4b4e6e60ea986c889389535
+      with:
+        name: bin-macos-arm64
+        path: |
+          build/**/*.dylib
+          build/**/netcommapp
+          build/**/dsapp
   build-windows:
     permissions:
       contents: read
