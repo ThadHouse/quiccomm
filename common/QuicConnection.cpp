@@ -5,6 +5,10 @@
 #include <wpi/timestamp.h>
 #include <cstring>
 
+#ifndef QuicNetByteSwapShort
+#define QuicNetByteSwapShort htons
+#endif
+
 using namespace qapi;
 
 struct QuicConnection::Impl

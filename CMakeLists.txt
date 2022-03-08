@@ -13,13 +13,20 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 # which point to directories outside the build tree to the install RPATH
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
+option(BUILD_SHARED_LIBS "Build with shared libs (needed for JNI)" OFF)
+
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 # Configure and build msquic dependency.
 set(QUIC_TLS "openssl")
 set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
+option(QUIC_BUILD_SHARED "Builds msquic as a dynamic library" OFF)
+option(QUIC_HIGH_RES_TIMERS "Configure the system to use high resolution timers" ON)
+option(QUIC_SHARED_EC "Use shared execution contexts between QUIC and UDP" ON)
 add_subdirectory(msquic)
 target_compile_features(inc INTERFACE cxx_std_17)
 
-set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 option(WITH_JAVA "Include java and JNI in the build" OFF)
 option(WITH_CSCORE "Build cscore (needs OpenCV)" OFF)
 option(WITH_WPIMATH "Build wpimath" OFF)
