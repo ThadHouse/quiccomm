@@ -1,2 +1,2 @@
 add_executable(dsapp main.cpp)
-target_link_libraries(dsapp frcds_static wpiutil inc warnings)
+target_link_libraries(dsapp frcds_static inc warnings)
