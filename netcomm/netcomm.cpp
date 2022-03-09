@@ -31,6 +31,7 @@ struct Netcomm::Impl
     void HandleNewAppData();
     void HandleReadyEvent();
     void HandleStreamData();
+    void HandleControlStreamData();
     void HandleDatagramData();
     void HandleDisconnect();
 
@@ -52,13 +53,14 @@ struct Netcomm::Impl
 
 void Netcomm::Impl::ThreadRun()
 {
-    std::array<WPI_Handle, 6> Events{
+    std::array<WPI_Handle, 7> Events{
         EndThreadEvent.GetHandle(),
         NewDataEvent.GetHandle(),
         Connection.GetDisconnectedEvent(),
         Connection.GetReadyEvent(),
         Connection.GetDatagramEvent(),
-        Connection.GetStreamEvent()};
+        Connection.GetStreamEvent(),
+        Connection.GetControlStreamEvent()};
 
     std::array<WPI_Handle, 6> SignaledEventsStorage;
     while (ThreadRunning)
@@ -91,6 +93,9 @@ void Netcomm::Impl::ThreadRun()
             {
                 HandleStreamData();
             }
+            else if (i == Events[6]) {
+                HandleControlStreamData();
+            }
         }
     }
 }
@@ -104,6 +109,13 @@ void Netcomm::Impl::HandleReadyEvent()
     std::scoped_lock Lock{Owner->EventMutex};
     Owner->Events.emplace_back(NetcommEvent::ConnectedEvent());
     Owner->Event.Set();
+}
+
+void Netcomm::Impl::HandleControlStreamData()
+{
+    std::vector<uint8_t> StreamData;
+    Connection.GetControlStreamData(StreamData);
+    //printf("Handled stream %d %d\n", (int)StreamData.size(), StreamData[0]);
 }
 
 void Netcomm::Impl::HandleStreamData()

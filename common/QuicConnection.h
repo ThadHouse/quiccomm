@@ -41,6 +41,9 @@ namespace qapi
         {
             return StreamEvent.GetHandle();
         }
+        WPI_EventHandle GetControlStreamEvent() noexcept {
+            return ControlStreamEvent.GetHandle();
+        }
         WPI_EventHandle GetDisconnectedEvent() noexcept
         {
             return DisconnectedEvent.GetHandle();
@@ -54,6 +57,14 @@ namespace qapi
             StreamData.clear();
         }
 
+        void GetControlStreamData(std::vector<uint8_t> &CachedData) noexcept
+        {
+            std::scoped_lock Lock{ControlStreamMutex};
+            ControlStreamEvent.Reset();
+            ControlStreamData.swap(CachedData);
+            ControlStreamData.clear();
+        }
+
         void GetDatagramData(std::vector<DatagramBuffer> &CachedData) noexcept
         {
             std::scoped_lock Lock{DatagramMutex};
@@ -64,8 +75,10 @@ namespace qapi
 
         void WriteDatagram(wpi::span<uint8_t> datagram);
         void WriteStream(wpi::span<uint8_t> data);
+        void WriteControlStream(wpi::span<uint8_t> data);
 
         void *GetStreamHandle() noexcept;
+        void *GetControlStreamHandle() noexcept;
         void *GetConnectionHandle() noexcept;
 
         // Only valid on client
@@ -77,11 +90,14 @@ namespace qapi
         wpi::Event ReadyEvent;
         wpi::Event DatagramEvent{true};
         wpi::Event StreamEvent{true};
+        wpi::Event ControlStreamEvent;
         wpi::Event DisconnectedEvent;
         wpi::mutex DatagramMutex;
         wpi::mutex StreamMutex;
+        wpi::mutex ControlStreamMutex;
         std::unique_ptr<Impl> pImpl;
         std::vector<uint8_t> StreamData;
+        std::vector<uint8_t> ControlStreamData;
         std::vector<DatagramBuffer> DatagramData;
     };
 } // namespace qapi

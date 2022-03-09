@@ -40,6 +40,7 @@ struct DriverStation::Impl
     void ThreadRun();
     void InitializeConnections();
     void HandleStreamData();
+    void HandleControlStreamData();
     void HandleDatagramData();
     void HandleTeamNumberChange();
     void HandleDisconnect();
@@ -77,6 +78,7 @@ void DriverStation::Impl::ThreadRun()
             Events.emplace_back(CurrentConnectionInternal->GetReadyEvent());
             Events.emplace_back(CurrentConnectionInternal->GetDatagramEvent());
             Events.emplace_back(CurrentConnectionInternal->GetStreamEvent());
+            Events.emplace_back(CurrentConnectionInternal->GetControlStreamEvent());
         }
         else
         {
@@ -108,6 +110,7 @@ void DriverStation::Impl::ThreadRun()
                 Events.emplace_back(i->GetReadyEvent());
                 Events.emplace_back(i->GetDatagramEvent());
                 Events.emplace_back(i->GetStreamEvent());
+                Events.emplace_back(i->GetControlStreamEvent());
             }
         }
 
@@ -158,6 +161,11 @@ void DriverStation::Impl::ThreadRun()
                 else if (CurrentConnectionInternal->GetStreamEvent() == i)
                 {
                     HandleStreamData();
+                    break;
+                }
+                else if (CurrentConnectionInternal->GetControlStreamEvent() == i)
+                {
+                    HandleControlStreamData();
                     break;
                 }
                 else if (CurrentConnectionInternal->GetDatagramEvent() == i)
@@ -248,13 +256,22 @@ void DriverStation::Impl::InitializeConnections()
 void DriverStation::Impl::HandleStreamData()
 {
     printf("Received Stream Data\n");
-    WPI_ResetEvent(CurrentConnectionInternal->GetStreamEvent());
+    std::vector<uint8_t> StreamData;
+    CurrentConnectionInternal->GetStreamData(StreamData);
+}
+
+void DriverStation::Impl::HandleControlStreamData()
+{
+    printf("Received Control Stream Data\n");
+        std::vector<uint8_t> StreamData;
+    CurrentConnectionInternal->GetControlStreamData(StreamData);
 }
 
 void DriverStation::Impl::HandleDatagramData()
 {
     printf("Received Datagram Data\n");
-    WPI_ResetEvent(CurrentConnectionInternal->GetDatagramEvent());
+    std::vector<DatagramBuffer> Buffers;
+    CurrentConnectionInternal->GetDatagramData(Buffers);
 }
 
 void DriverStation::Impl::HandleTeamNumberChange()

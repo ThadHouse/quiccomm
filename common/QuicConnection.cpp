@@ -16,11 +16,9 @@ struct QuicConnection::Impl
     QuicConnection *Owner = nullptr;
     HQUIC Connection = nullptr;
     HQUIC Stream = nullptr;
+    HQUIC ControlStream = nullptr;
     HQUIC Listener = nullptr;
     HQUIC Configuration = nullptr;
-
-    wpi::mutex DatagramMutex;
-    wpi::mutex StreamMutex;
 
     Impl(QuicConnection *Ownr)
         : Owner{Ownr}
@@ -29,10 +27,16 @@ struct QuicConnection::Impl
 
     QUIC_STATUS ConnCallback(QUIC_CONNECTION_EVENT *Event);
     QUIC_STATUS StreamCallback(QUIC_STREAM_EVENT *Event);
+    QUIC_STATUS ControlStreamCallback(QUIC_STREAM_EVENT *Event);
     QUIC_STATUS ListenerCallback(QUIC_LISTENER_EVENT *Event);
 
     ~Impl() noexcept
     {
+        if (ControlStream)
+        {
+            MsQuic->StreamShutdown(ControlStream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+            MsQuic->StreamClose(ControlStream);
+        }
         if (Stream)
         {
             MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
@@ -62,6 +66,11 @@ QuicConnection::~QuicConnection() noexcept
 void *QuicConnection::GetStreamHandle() noexcept
 {
     return pImpl->Stream;
+}
+
+void *QuicConnection::GetControlStreamHandle() noexcept
+{
+    return pImpl->ControlStream;
 }
 
 void *QuicConnection::GetConnectionHandle() noexcept
@@ -95,6 +104,32 @@ void QuicConnection::WriteStream(wpi::span<uint8_t> data)
         printf("Stream failed to send\n");
         free(Buffer);
     }
+}
+
+void QuicConnection::WriteControlStream(wpi::span<uint8_t> data)
+{
+    QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + data.size());
+    Buffer->Buffer = (uint8_t *)(Buffer + 1);
+    Buffer->Length = (uint32_t)data.size();
+    std::memcpy(Buffer->Buffer, data.data(), data.size());
+    QUIC_STATUS Status = MsQuic->StreamSend(pImpl->ControlStream, Buffer, 1, QUIC_SEND_FLAG_NONE, Buffer);
+    if (QUIC_FAILED(Status))
+    {
+        printf("Control stream failed to send\n");
+        free(Buffer);
+    }
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+    _Function_class_(QUIC_STREAM_CALLBACK) static QUIC_STATUS
+    QUIC_API
+    ControlStreamCallback(
+        _In_ HQUIC,
+        _In_opt_ void *Context,
+        _Inout_ QUIC_STREAM_EVENT *Event)
+{
+    //printf("Stream Callback %d\n", Event->Type);
+    return reinterpret_cast<QuicConnection::Impl *>(Context)->ControlStreamCallback(Event);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -179,18 +214,18 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
         throw std::runtime_error("Failed to load credential");
     }
 
-    BOOLEAN value = TRUE;
-    Status =
-        MsQuic->SetParam(
-            pImpl->Connection,
-            QUIC_PARAM_CONN_DISABLE_1RTT_ENCRYPTION,
-            sizeof(value),
-            &value);
+    // BOOLEAN value = TRUE;
+    // Status =
+    //     MsQuic->SetParam(
+    //         pImpl->Connection,
+    //         QUIC_PARAM_CONN_DISABLE_1RTT_ENCRYPTION,
+    //         sizeof(value),
+    //         &value);
 
-    if (QUIC_FAILED(Status))
-    {
-        throw std::runtime_error("Failed to disable encryption");
-    }
+    // if (QUIC_FAILED(Status))
+    // {
+    //     throw std::runtime_error("Failed to disable encryption");
+    // }
 
     Status = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, StreamCallback, pImpl.get(), &pImpl->Stream);
     if (QUIC_FAILED(Status))
@@ -199,6 +234,18 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
     }
 
     Status = MsQuic->StreamStart(pImpl->Stream, QUIC_STREAM_START_FLAG_IMMEDIATE);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to start stream");
+    }
+
+    Status = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, ControlStreamCallback, pImpl.get(), &pImpl->ControlStream);
+    if (QUIC_FAILED(Status))
+    {
+        throw std::runtime_error("Failed to open stream");
+    }
+
+    Status = MsQuic->StreamStart(pImpl->ControlStream, QUIC_STREAM_START_FLAG_IMMEDIATE);
     if (QUIC_FAILED(Status))
     {
         throw std::runtime_error("Failed to start stream");
@@ -221,7 +268,7 @@ QuicConnection::QuicConnection(uint16_t Port)
     QUIC_SETTINGS Settings;
     Settings.IsSetFlags = 0;
     Settings.IsSet.PeerBidiStreamCount = 1;
-    Settings.PeerBidiStreamCount = 1;
+    Settings.PeerBidiStreamCount = 2;
     // Settings.IsSet.KeepAliveIntervalMs = 1;
     // Settings.KeepAliveIntervalMs = 1000;
     Settings.IsSet.DatagramReceiveEnabled = 1;
@@ -281,7 +328,12 @@ void QuicConnection::Disconnect()
 {
     if (pImpl->Stream)
     {
-        MsQuic->StreamShutdown(pImpl->Stream, QUIC_STREAM_SHUTDOWN_FLAG_NONE, 0);
+        MsQuic->StreamShutdown(pImpl->Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+    }
+
+    if (pImpl->ControlStream)
+    {
+        MsQuic->StreamShutdown(pImpl->ControlStream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
     }
 }
 
@@ -289,16 +341,28 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
 {
     if (Event->Type == QUIC_CONNECTION_EVENT_CONNECTED)
     {
-        if (Stream != nullptr)
+        if (ControlStream != nullptr)
         {
             Owner->ReadyEvent.Set();
         }
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED)
     {
-        MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void *)::StreamCallback, this);
-        Stream = Event->PEER_STREAM_STARTED.Stream;
-        Owner->ReadyEvent.Set();
+        if (ControlStream)
+        {
+            return QUIC_STATUS_NOT_SUPPORTED;
+        }
+        if (Stream)
+        {
+            MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void *)::ControlStreamCallback, this);
+            ControlStream = Event->PEER_STREAM_STARTED.Stream;
+            Owner->ReadyEvent.Set();
+        }
+        else
+        {
+            MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void *)::StreamCallback, this);
+            Stream = Event->PEER_STREAM_STARTED.Stream;
+        }
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE)
     {
@@ -325,10 +389,14 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
     return QUIC_STATUS_SUCCESS;
 }
 
-QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event)
+QUIC_STATUS QuicConnection::Impl::ControlStreamCallback(QUIC_STREAM_EVENT *Event)
 {
     if (Event->Type == QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE)
     {
+        if (Stream)
+        {
+            MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        }
         MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
     }
     else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
@@ -339,6 +407,32 @@ QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event)
             Owner->StreamData.insert(Owner->StreamData.end(), Event->RECEIVE.Buffers[i].Buffer, Event->RECEIVE.Buffers[i].Buffer + Event->RECEIVE.Buffers[i].Length);
         }
         Owner->StreamEvent.Set();
+    }
+    else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
+    {
+        free(Event->SEND_COMPLETE.ClientContext);
+    }
+    return QUIC_STATUS_SUCCESS;
+}
+
+QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event)
+{
+    if (Event->Type == QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE)
+    {
+        if (ControlStream)
+        {
+            MsQuic->StreamShutdown(ControlStream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        }
+        MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+    }
+    else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
+    {
+        std::scoped_lock Lock{Owner->ControlStreamMutex};
+        for (uint32_t i = 0; i < Event->RECEIVE.BufferCount; i++)
+        {
+            Owner->ControlStreamData.insert(Owner->ControlStreamData.end(), Event->RECEIVE.Buffers[i].Buffer, Event->RECEIVE.Buffers[i].Buffer + Event->RECEIVE.Buffers[i].Length);
+        }
+        Owner->ControlStreamEvent.Set();
     }
     else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
     {
