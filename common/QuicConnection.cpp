@@ -172,7 +172,6 @@ const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
 
 QuicConnection::QuicConnection(std::string Host, uint16_t Port)
 {
-    printf("Starting client connection\n");
     pImpl = std::make_unique<QuicConnection::Impl>(this);
     QUIC_STATUS Status = MsQuic->ConnectionOpen(GetRegistration(), ConnCallback, pImpl.get(), &pImpl->Connection);
     if (QUIC_FAILED(Status))
@@ -334,6 +333,10 @@ void QuicConnection::Disconnect()
     if (pImpl->ControlStream)
     {
         MsQuic->StreamShutdown(pImpl->ControlStream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+    }
+
+    if (pImpl->Connection) {
+        MsQuic->ConnectionShutdown(pImpl->Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
     }
 }
 

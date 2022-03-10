@@ -22,7 +22,7 @@ set(QUIC_TLS "openssl" CACHE STRING "TLS Library to use")
 set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
 option(QUIC_BUILD_SHARED "Builds msquic as a dynamic library" OFF)
 option(QUIC_HIGH_RES_TIMERS "Configure the system to use high resolution timers" ON)
-option(QUIC_SHARED_EC "Use shared execution contexts between QUIC and UDP" ON)
+option(QUIC_SHARED_EC "Use shared execution contexts between QUIC and UDP" OFF)
 add_subdirectory(msquic)
 target_compile_features(inc INTERFACE cxx_std_17)
 

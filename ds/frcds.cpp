@@ -22,7 +22,7 @@ struct DriverStation::Impl
     DriverStation* Owner;
     QuicApi Api{"DriverStation"};
     std::array<QuicConnection, 4> ConnectionStore;
-    int ConnectionCount;
+    int ConnectionCount = 0;
     std::vector<QuicConnection *> PendingConnections;
     QuicConnection *CurrentConnectionInternal = nullptr;
     QuicConnection* CurrentConnection = nullptr;
@@ -62,8 +62,18 @@ struct DriverStation::Impl
 void DriverStation::Impl::ThreadRun()
 {
     wpi::SmallVector<WPI_Handle, 64> Events;
-
     wpi::SmallVector<WPI_Handle, 64> SignaledEventsStorage;
+    wpi::span<WPI_Handle> SignaledEvents;
+
+    // First, wait for init or exit
+    Events.emplace_back(EndThreadEvent);
+    Events.emplace_back(TeamNumberChangeEvent);
+    SignaledEventsStorage.resize(Events.size());
+
+    wpi::WaitForObjects(Events, SignaledEventsStorage);
+    // No need to actually check signaled events, as we will either have received
+    // started, or the thread being killed.
+
     while (ThreadRunning)
     {
         Events.clear();
@@ -115,7 +125,6 @@ void DriverStation::Impl::ThreadRun()
         }
 
         SignaledEventsStorage.resize(Events.size());
-        wpi::span<WPI_Handle> SignaledEvents;
         if (CurrentConnectionInternal)
         {
             SignaledEvents = wpi::WaitForObjects(Events, SignaledEventsStorage);
@@ -218,7 +227,6 @@ void DriverStation::Impl::ThreadRun()
 
 void DriverStation::Impl::InitializeConnections()
 {
-    printf("Innitting conns\n");
     if (CurrentConnection) {
         return;
     }
