@@ -260,6 +260,45 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port)
     }
 }
 
+//
+// Helper function to convert a hex character to its decimal value.
+//
+uint8_t
+DecodeHexChar(
+    _In_ char c
+    )
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return 10 + c - 'A';
+    if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+    return 0;
+}
+
+//
+// Helper function to convert a string of hex characters to a byte buffer.
+//
+uint32_t
+DecodeHexBuffer(
+    _In_z_ const char* HexBuffer,
+    _In_ uint32_t OutBufferLen,
+    _Out_writes_to_(OutBufferLen, return)
+        uint8_t* OutBuffer
+    )
+{
+    uint32_t HexBufferLen = (uint32_t)strlen(HexBuffer) / 2;
+    if (HexBufferLen > OutBufferLen) {
+        return 0;
+    }
+
+    for (uint32_t i = 0; i < HexBufferLen; i++) {
+        OutBuffer[i] =
+            (DecodeHexChar(HexBuffer[i * 2]) << 4) |
+            DecodeHexChar(HexBuffer[i * 2 + 1]);
+    }
+
+    return HexBufferLen;
+}
+
 QuicConnection::QuicConnection(uint16_t Port)
 {
     pImpl = std::make_unique<QuicConnection::Impl>(this);
@@ -290,11 +329,22 @@ QuicConnection::QuicConnection(uint16_t Port)
 
     QUIC_CREDENTIAL_CONFIG CredConfig;
     std::memset(&CredConfig, 0, sizeof(CredConfig));
+#ifdef _WIN32
+    // 601BD997ECE8DFF54EB1B3428A9DF0F630A0DEA1
+    CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_HASH;
+    QUIC_CERTIFICATE_HASH CertHash;
+    DecodeHexBuffer(
+                "601BD997ECE8DFF54EB1B3428A9DF0F630A0DEA1",
+                sizeof(CertHash.ShaHash),
+                CertHash.ShaHash);
+    CredConfig.CertificateHash = &CertHash;
+#else
     CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_FILE;
     QUIC_CERTIFICATE_FILE CertFile;
     CertFile.CertificateFile = "/Users/thad/GitHub/quiccomm/cert/server.cert";
     CertFile.PrivateKeyFile = "/Users/thad/GitHub/quiccomm/cert/server.key";
     CredConfig.CertificateFile = &CertFile;
+#endif
 
     Status = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
     if (QUIC_FAILED(Status))

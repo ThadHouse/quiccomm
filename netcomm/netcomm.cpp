@@ -4,6 +4,8 @@
 #include <thread>
 #include <atomic>
 #include <wpi/mutex.h>
+#include "tags/TagManager.h"
+#include "tags/JoystickData.h"
 #ifndef _MSC_VER
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #else
@@ -13,6 +15,8 @@
 
 using namespace ncom;
 using namespace qapi;
+
+#define CALL_MEMBER_FUNCTION(T) [&](const auto& Tag){T(Tag);}
 
 struct Netcomm::Impl
 {
@@ -24,6 +28,7 @@ struct Netcomm::Impl
     std::atomic_bool ThreadRunning{true};
     wpi::Event EndThreadEvent;
     wpi::Event NewDataEvent{true};
+    tags::TagManager TagManager;
 
     wpi::mutex AppDataMutex;
 
@@ -35,9 +40,12 @@ struct Netcomm::Impl
     void HandleDatagramData();
     void HandleDisconnect();
 
+    void HandleJoystickTag(const tags::TagData& TagData);
+
     Impl(Netcomm *Owner) : Owner{Owner}, EventThread{[&]
                                                      { ThreadRun(); }}
     {
+        TagManager.AddTagFunction(tags::JoystickData::TagNumber, CALL_MEMBER_FUNCTION(HandleJoystickTag));
     }
 
     ~Impl()
@@ -50,6 +58,15 @@ struct Netcomm::Impl
         }
     }
 };
+
+void Netcomm::Impl::HandleJoystickTag(const tags::TagData& TagData) {
+    tags::JoystickData StickData{TagData};
+    if (!StickData.GetStickData().isConnected) {
+        return;
+    }
+
+    printf("Received joystick data\n");
+}
 
 void Netcomm::Impl::ThreadRun()
 {
@@ -132,11 +149,17 @@ void Netcomm::Impl::HandleDatagramData()
     if (Datagrams.empty()) {
         return;
     }
+    for (auto&& dg : Datagrams) {
+        wpi::span<uint8_t> dgSpan{dg.Buffer.get(), (size_t)dg.Length};
+        TagManager.ReadTags(dgSpan);
+    }
     std::scoped_lock Lock{Owner->EventMutex};
     for (auto&& dg : Datagrams) {
         Owner->Events.emplace_back(NetcommEvent::DatagramReceivedEvent(dg.Timestamp));
     }
     Owner->Event.Set();
+
+
 }
 
 void Netcomm::Impl::HandleDisconnect()

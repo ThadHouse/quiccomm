@@ -85,6 +85,7 @@
         "locale": "cpp",
         "span": "cpp",
         "stack": "cpp",
-        "xiosbase": "cpp"
+        "xiosbase": "cpp",
+        "xutility": "cpp"
     }
 }

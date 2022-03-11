@@ -7,6 +7,7 @@
 #include <atomic>
 #include <wpi/timestamp.h>
 #include <QuicApiInternal.h>
+#include "tags/JoystickData.h"
 #ifndef _MSC_VER
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #else
@@ -351,9 +352,18 @@ void DriverStation::SendControlPacket() {
     if (!pImpl->CurrentConnection) {
         return;
     }
-    uint8_t Data[42];
-    Data[0] = cpCount;
-    cpCount++;
+    wpi::SmallVector<char, 512> Vec;
+    wpi::raw_svector_ostream svec{Vec};
+
+    COMM_JoystickData cJoyData = {};
+    cJoyData.isConnected = true;
+    cJoyData.axesCount = 1;
+    cJoyData.axes[0] = 42;
+    tags::JoystickData jData{cJoyData};
+    jData.WriteTag(svec);
+
+    wpi::span<uint8_t> Data{(uint8_t*)Vec.data(), Vec.size()};
+
     pImpl->CurrentConnection->WriteDatagram(Data);
 }
 

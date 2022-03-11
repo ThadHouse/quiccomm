@@ -18,7 +18,7 @@ option(BUILD_SHARED_LIBS "Build with shared libs (needed for JNI)" OFF)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 # Configure and build msquic dependency.
-set(QUIC_TLS "openssl" CACHE STRING "TLS Library to use")
+#set(QUIC_TLS "openssl" CACHE STRING "TLS Library to use")
 set(QUIC_ENABLE_LOGGING ON CACHE BOOL "Enable MsQuic logging")
 option(QUIC_BUILD_SHARED "Builds msquic as a dynamic library" OFF)
 option(QUIC_HIGH_RES_TIMERS "Configure the system to use high resolution timers" ON)
