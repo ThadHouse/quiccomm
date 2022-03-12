@@ -1,21 +1,24 @@
 #include "QuicConnection.h"
 #include "QuicApi.h"
 #include "wpi/Synchronization.h"
+#include <thread>
 
 // Forward every time we get a control packet
 
 using namespace qapi;
 
-static void ReadyEvent() {
 
+static wpi::Event DisconnectEvent;
+static void ReadyHandler() {
+    printf("Connected!\n");
 }
 
-static void DisconnectEvent() {
-
+static void DisconnectHandler() {
+    printf("Disconnected\n");
+    DisconnectEvent.Set();
 }
 
 static void HandleStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers) {
-    // Nothing in the Stream is useful
     (void)Buffers;
 }
 
@@ -27,18 +30,26 @@ static void HandleDatagramData(const QuicConnection::DataBuffer& Buffer) {
     (void)Buffer;
 }
 
-int main() {
-
-
-    QuicApi Api{"NetcommDaemon"};
+void DsCommThread() {
     QuicConnection::Callbacks Callbacks {
-        ReadyEvent,
-        DisconnectEvent,
+        ReadyHandler,
+        DisconnectHandler,
         HandleDatagramData,
         HandleStreamData,
         HandleControlStreamData
     };
-    QuicConnection Connection{1360, Callbacks};
 
+    while (true) {
+        printf("Waiting for connection\n");
+        QuicConnection Connection{1360, Callbacks};
+        wpi::WaitForObject(DisconnectEvent.GetHandle());
+    }
+}
 
+int main() {
+    QuicApi Api{"NetcommDaemon"};
+
+    std::thread DsComm{[]{DsCommThread();}};
+
+    DsComm.join();
 }

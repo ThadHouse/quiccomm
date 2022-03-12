@@ -3,6 +3,7 @@
 #include "QuicApiInternal.h"
 #include <wpi/mutex.h>
 #include <wpi/timestamp.h>
+#include <wpi/Synchronization.h>
 #include <cstring>
 
 #ifndef QuicNetByteSwapShort
@@ -19,6 +20,7 @@ struct QuicConnection::Impl
     HQUIC ControlStream = nullptr;
     HQUIC Listener = nullptr;
     HQUIC Configuration = nullptr;
+    wpi::Event ConnShutdown;
     Callbacks Callbacks;
 
     Impl(QuicConnection *Ownr)
@@ -33,6 +35,22 @@ struct QuicConnection::Impl
 
     ~Impl() noexcept
     {
+        if (Listener) {
+            MsQuic->ListenerStop(Listener);
+            MsQuic->ListenerClose(Listener);
+
+            if (!Connection) {
+                // If we don't have a connection after stopping and closing the listener
+                // everything is free'd already
+                return;
+            }
+
+            // Shut down the connection
+            MsQuic->ConnectionShutdown(Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+            // Wait for connection shutdown event
+            wpi::WaitForObject(ConnShutdown.GetHandle());
+        }
+
         if (ControlStream)
         {
             MsQuic->StreamShutdown(ControlStream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
@@ -51,11 +69,6 @@ struct QuicConnection::Impl
         if (Configuration)
         {
             MsQuic->ConfigurationClose(Configuration);
-        }
-        if (Listener)
-        {
-            MsQuic->ListenerStop(Listener);
-            MsQuic->ListenerClose(Listener);
         }
     }
 };
@@ -424,6 +437,7 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
     else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE)
     {
         Callbacks.Disconnected();
+        ConnShutdown.Set();
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED)
     {
@@ -490,16 +504,13 @@ QUIC_STATUS QuicConnection::Impl::ListenerCallback(QUIC_LISTENER_EVENT *Event)
 {
     if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION)
     {
+        QUIC_STATUS Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
+        if (QUIC_FAILED(Status)) {
+           return Status;
+        }
         MsQuic->ListenerStop(Listener);
-        BOOLEAN value = TRUE;
-        MsQuic->SetParam(
-            Event->NEW_CONNECTION.Connection,
-            QUIC_PARAM_CONN_DISABLE_1RTT_ENCRYPTION,
-            sizeof(value),
-            &value);
         MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void *)::ConnCallback, this);
         Connection = Event->NEW_CONNECTION.Connection;
-        QUIC_STATUS Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
         return Status;
     }
     return QUIC_STATUS_SUCCESS;
