@@ -22,7 +22,8 @@ struct Netcomm::Impl
 {
     Netcomm *Owner;
     QuicApi Api{"Netcomm"};
-    QuicConnection Connection{1360};
+    QuicConnection::Callbacks Callbacks;
+    QuicConnection Connection;
 
     std::thread EventThread;
     std::atomic_bool ThreadRunning{true};
@@ -35,16 +36,29 @@ struct Netcomm::Impl
     void ThreadRun();
     void HandleNewAppData();
     void HandleReadyEvent();
-    void HandleStreamData();
-    void HandleControlStreamData();
-    void HandleDatagramData();
-    void HandleDisconnect();
+    void HandleStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers);
+    void HandleControlStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers);
+    void HandleDatagramData(const QuicConnection::DataBuffer& Buffer);
+    void HandleDisconnectEvent();
+
+
 
     void HandleJoystickTag(const tags::TagData& TagData);
 
-    Impl(Netcomm *Owner) : Owner{Owner}, EventThread{[&]
+    Impl(Netcomm *Owner) : Owner{Owner},
+        Callbacks{
+            [&]{HandleReadyEvent();},
+            [&]{HandleDisconnectEvent();},
+            [&](const auto& d){HandleDatagramData(d);},
+            [&](auto d){HandleStreamData(d);},
+            [&](auto d){HandleControlStreamData(d);}
+        },
+        Connection{1360, Callbacks},
+
+    EventThread{[&]
                                                      { ThreadRun(); }}
     {
+
         TagManager.AddTagFunction(tags::JoystickData::TagNumber, CALL_MEMBER_FUNCTION(HandleJoystickTag));
     }
 

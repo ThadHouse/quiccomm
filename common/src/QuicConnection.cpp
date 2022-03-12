@@ -19,6 +19,7 @@ struct QuicConnection::Impl
     HQUIC ControlStream = nullptr;
     HQUIC Listener = nullptr;
     HQUIC Configuration = nullptr;
+    Callbacks Callbacks;
 
     Impl(QuicConnection *Ownr)
         : Owner{Ownr}
@@ -170,9 +171,11 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
 
 const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
 
-QuicConnection::QuicConnection(std::string Host, uint16_t Port)
+QuicConnection::QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs)
 {
     pImpl = std::make_unique<QuicConnection::Impl>(this);
+    pImpl->Callbacks = std::move(Cbs);
+
     QUIC_STATUS Status = MsQuic->ConnectionOpen(GetRegistration(), ConnCallback, pImpl.get(), &pImpl->Connection);
     if (QUIC_FAILED(Status))
     {
@@ -299,9 +302,10 @@ DecodeHexBuffer(
     return HexBufferLen;
 }
 
-QuicConnection::QuicConnection(uint16_t Port)
+QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs)
 {
     pImpl = std::make_unique<QuicConnection::Impl>(this);
+    pImpl->Callbacks = std::move(Cbs);
 
     QUIC_SETTINGS Settings;
     Settings.IsSetFlags = 0;
@@ -396,7 +400,7 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
     {
         if (ControlStream != nullptr)
         {
-            Owner->ReadyEvent.Set();
+            Callbacks.Ready();
         }
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED)
@@ -409,7 +413,7 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
         {
             MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void *)::ControlStreamCallback, this);
             ControlStream = Event->PEER_STREAM_STARTED.Stream;
-            Owner->ReadyEvent.Set();
+            Callbacks.Ready();
         }
         else
         {
@@ -419,18 +423,14 @@ QUIC_STATUS QuicConnection::Impl::ConnCallback(QUIC_CONNECTION_EVENT *Event)
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE)
     {
-        Owner->DisconnectedEvent.Set();
+        Callbacks.Disconnected();
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED)
     {
-        DatagramBuffer datagram;
-        datagram.Length = Event->DATAGRAM_RECEIVED.Buffer->Length;
-        datagram.Buffer = std::make_unique<uint8_t[]>(datagram.Length);
-        datagram.Timestamp = wpi::Now();
-        std::memcpy(datagram.Buffer.get(), Event->DATAGRAM_RECEIVED.Buffer->Buffer, datagram.Length);
-        std::scoped_lock Lock{Owner->DatagramMutex};
-        Owner->DatagramData.emplace_back(std::move(datagram));
-        Owner->DatagramEvent.Set();
+        DataBuffer Buffer;
+        Buffer.Length = Event->DATAGRAM_RECEIVED.Buffer->Length;
+        Buffer.Buffer = Event->DATAGRAM_RECEIVED.Buffer->Buffer;
+        Callbacks.DatagramReceived(Buffer);
     }
     else if (Event->Type == QUIC_CONNECTION_EVENT_DATAGRAM_SEND_STATE_CHANGED)
     {
@@ -454,12 +454,8 @@ QUIC_STATUS QuicConnection::Impl::ControlStreamCallback(QUIC_STREAM_EVENT *Event
     }
     else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
     {
-        std::scoped_lock Lock{Owner->StreamMutex};
-        for (uint32_t i = 0; i < Event->RECEIVE.BufferCount; i++)
-        {
-            Owner->StreamData.insert(Owner->StreamData.end(), Event->RECEIVE.Buffers[i].Buffer, Event->RECEIVE.Buffers[i].Buffer + Event->RECEIVE.Buffers[i].Length);
-        }
-        Owner->StreamEvent.Set();
+        const DataBuffer* Buffers = reinterpret_cast<const DataBuffer*>(Event->RECEIVE.Buffers);
+        Callbacks.ControlStreamReceived(wpi::span{Buffers, Event->RECEIVE.BufferCount});
     }
     else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
     {
@@ -480,12 +476,8 @@ QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event)
     }
     else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
     {
-        std::scoped_lock Lock{Owner->ControlStreamMutex};
-        for (uint32_t i = 0; i < Event->RECEIVE.BufferCount; i++)
-        {
-            Owner->ControlStreamData.insert(Owner->ControlStreamData.end(), Event->RECEIVE.Buffers[i].Buffer, Event->RECEIVE.Buffers[i].Buffer + Event->RECEIVE.Buffers[i].Length);
-        }
-        Owner->ControlStreamEvent.Set();
+        const DataBuffer* Buffers = reinterpret_cast<const DataBuffer*>(Event->RECEIVE.Buffers);
+        Callbacks.StreamReceived(wpi::span{Buffers, Event->RECEIVE.BufferCount});
     }
     else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
     {

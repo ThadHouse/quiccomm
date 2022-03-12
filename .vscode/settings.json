@@ -86,6 +86,7 @@
         "span": "cpp",
         "stack": "cpp",
         "xiosbase": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "__tree": "cpp"
     }
 }
