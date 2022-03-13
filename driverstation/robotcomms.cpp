@@ -55,6 +55,15 @@ RobotComms::Impl::~Impl() noexcept {
     }
 }
 
+struct QuicRobotConnection {
+    qapi::QuicConnection Connection;
+    ds::ControlPacketThread ControlPacketThread;
+
+    QuicRobotConnection(ds::ControlPacketThread::Callback ControlCallback, const char* Hostname, qapi::Callbacks QuicCallbacks, int32_t* Status)
+        : Connection{Hostname, 1360, std::move(QuicCallbacks), Status},
+            ControlPacketThread{std::move(ControlCallback), Status} {
+    }
+};
 
 void RobotComms::Impl::ThreadMain() {
     qapi::Callbacks Callbacks = DsEvents->GetQuicCallbacks();
@@ -65,17 +74,14 @@ void RobotComms::Impl::ThreadMain() {
     wpi::SmallVector<WPI_Handle, 64> SignaledEventsStorage;
     wpi::span<WPI_Handle> SignaledEvents;
 
-    // Wait for either team number or exit
-    wpi::WaitForObject(HostnameUpdateEvent.GetHandle());
-    // No need to actually check signaled events, as we will either have received
-    // started, or the thread being killed.
+    std::unique_ptr<QuicRobotConnection> RobotConnection;
 
     while (ThreadRunning) {
         Events.clear();
         SignaledEventsStorage.clear();
 
         Events.emplace_back(HostnameUpdateEvent);
-        Events.emplace_back(ReadyEvent)
+        Events.emplace_back(ReadyEvent);
         Events.emplace_back(DisconnectedEvent);
 
         SignaledEventsStorage.resize(Events.size());
@@ -85,9 +91,13 @@ void RobotComms::Impl::ThreadMain() {
             break;
         }
 
-        for (const auto&& Event : SignaledEvents) {
+        for (auto&& Event : SignaledEvents) {
             if (Event == HostnameUpdateEvent.GetHandle()) {
-
+                if (RobotConnection) {
+                    RobotConnection->Connection.Disconnect();
+                } else {
+                    RobotConnection.reset(new (std::nothrow)QuicRobotConnection{})
+                }
             } else if (Event == ReadyEvent.GetHandle()) {
                 // Ready
 

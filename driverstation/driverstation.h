@@ -30,8 +30,8 @@ typedef struct DS_Event {
     };
 } DS_Event;
 
-typedef int DS_Bool;
-typedef int DS_Status;
+typedef int32_t DS_Bool;
+typedef int32_t DS_Status;
 
 #define DS_STATUS_SUCCESS 0
 #define DS_ALREADY_INITIALIZED 1

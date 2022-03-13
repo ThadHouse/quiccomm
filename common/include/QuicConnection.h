@@ -12,9 +12,9 @@ namespace qapi
     {
     public:
 
-        QuicConnection();
-        QuicConnection(uint16_t Port, Callbacks Cbs);
-        QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs);
+        QuicConnection() noexcept;
+        QuicConnection(uint16_t Port, Callbacks Cbs, int32_t* Status) noexcept;
+        QuicConnection(const char* Host, uint16_t Port, Callbacks Cbs, int32_t* Status) noexcept;
 
         ~QuicConnection() noexcept;
 

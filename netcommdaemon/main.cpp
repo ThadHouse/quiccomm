@@ -41,7 +41,8 @@ void DsCommThread() {
 
     while (true) {
         printf("Waiting for connection\n");
-        QuicConnection Connection{1360, Callbacks};
+        int32_t Status = 0;
+        QuicConnection Connection{1360, Callbacks, &Status};
         wpi::WaitForObject(DisconnectEvent.GetHandle());
     }
 }

@@ -184,15 +184,21 @@ _IRQL_requires_max_(PASSIVE_LEVEL)
 
 const QUIC_BUFFER Alpn = {sizeof("frc") - 1, (uint8_t *)"frc"};
 
-QuicConnection::QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs)
+QuicConnection::QuicConnection(const char* Host, uint16_t Port, Callbacks Cbs, int32_t* Status) noexcept
 {
-    pImpl = std::make_unique<QuicConnection::Impl>(this);
+    pImpl.reset(new (std::nothrow)QuicConnection::Impl{this});
+    if (!pImpl) {
+        *Status = QUIC_STATUS_OUT_OF_MEMORY;
+        return;
+    }
+
     pImpl->Callbacks = std::move(Cbs);
 
-    QUIC_STATUS Status = MsQuic->ConnectionOpen(GetRegistration(), ConnCallback, pImpl.get(), &pImpl->Connection);
-    if (QUIC_FAILED(Status))
+    QUIC_STATUS QStatus = MsQuic->ConnectionOpen(GetRegistration(), ConnCallback, pImpl.get(), &pImpl->Connection);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to open connection");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
     QUIC_SETTINGS Settings;
@@ -206,7 +212,7 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs)
     Settings.IsSet.IdleTimeoutMs = 1;
     Settings.IdleTimeoutMs = 2000;
 
-    Status = MsQuic->ConfigurationOpen(
+    QStatus = MsQuic->ConfigurationOpen(
         GetRegistration(),
         &Alpn,
         1,
@@ -214,19 +220,21 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs)
         sizeof(Settings),
         nullptr,
         &pImpl->Configuration);
-    if (QUIC_FAILED(Status))
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to open configuration");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
     QUIC_CREDENTIAL_CONFIG CredConfig;
     std::memset(&CredConfig, 0, sizeof(CredConfig));
     CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
 
-    Status = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to load credential");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
     // BOOLEAN value = TRUE;
@@ -242,38 +250,45 @@ QuicConnection::QuicConnection(std::string Host, uint16_t Port, Callbacks Cbs)
     //     throw std::runtime_error("Failed to disable encryption");
     // }
 
-    Status = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, StreamCallback, pImpl.get(), &pImpl->Stream);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, StreamCallback, pImpl.get(), &pImpl->Stream);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to open stream");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
-    Status = MsQuic->StreamStart(pImpl->Stream, QUIC_STREAM_START_FLAG_IMMEDIATE);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->StreamStart(pImpl->Stream, QUIC_STREAM_START_FLAG_IMMEDIATE);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to start stream");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
-    Status = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, ControlStreamCallback, pImpl.get(), &pImpl->ControlStream);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->StreamOpen(pImpl->Connection, QUIC_STREAM_OPEN_FLAG_NONE, ControlStreamCallback, pImpl.get(), &pImpl->ControlStream);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to open stream");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
-    Status = MsQuic->StreamStart(pImpl->ControlStream, QUIC_STREAM_START_FLAG_IMMEDIATE);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->StreamStart(pImpl->ControlStream, QUIC_STREAM_START_FLAG_IMMEDIATE);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to start stream");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
-    Status = MsQuic->ConnectionStart(pImpl->Connection,
+    QStatus = MsQuic->ConnectionStart(pImpl->Connection,
                                      pImpl->Configuration, QUIC_ADDRESS_FAMILY_UNSPEC,
-                                     Host.c_str(), Port);
+                                     Host, Port);
 
-    if (QUIC_FAILED(Status))
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to start connection");
+        *Status = (int32_t)QStatus;
+        return;
     }
+
+    *Status = 0;
 }
 
 //
@@ -315,9 +330,13 @@ DecodeHexBuffer(
     return HexBufferLen;
 }
 
-QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs)
+QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs, int32_t* Status) noexcept
 {
-    pImpl = std::make_unique<QuicConnection::Impl>(this);
+    pImpl.reset(new (std::nothrow)QuicConnection::Impl{this});
+    if (!pImpl) {
+        *Status = QUIC_STATUS_OUT_OF_MEMORY;
+        return;
+    }
     pImpl->Callbacks = std::move(Cbs);
 
     QUIC_SETTINGS Settings;
@@ -331,7 +350,7 @@ QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs)
     Settings.IsSet.IdleTimeoutMs = 1;
     Settings.IdleTimeoutMs = 2000;
 
-    QUIC_STATUS Status = MsQuic->ConfigurationOpen(
+    QUIC_STATUS QStatus = MsQuic->ConfigurationOpen(
         GetRegistration(),
         &Alpn,
         1,
@@ -339,9 +358,10 @@ QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs)
         sizeof(Settings),
         nullptr,
         &pImpl->Configuration);
-    if (QUIC_FAILED(Status))
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to open configuration");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
     QUIC_CREDENTIAL_CONFIG CredConfig;
@@ -363,32 +383,35 @@ QuicConnection::QuicConnection(uint16_t Port, Callbacks Cbs)
     CredConfig.CertificateFile = &CertFile;
 #endif
 
-    Status = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->ConfigurationLoadCredential(pImpl->Configuration, &CredConfig);
+    if (QUIC_FAILED(QStatus))
     {
-        throw std::runtime_error("Failed to load credential");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
-    Status = MsQuic->ListenerOpen(GetRegistration(), ListenerCallback, pImpl.get(), &pImpl->Listener);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->ListenerOpen(GetRegistration(), ListenerCallback, pImpl.get(), &pImpl->Listener);
+    if (QUIC_FAILED(QStatus))
     {
-        printf("Failed with status %d\n", (int)Status);
-        throw std::runtime_error("Failed to open listener");
+        *Status = (int32_t)QStatus;
+        return;
     }
 
     QUIC_ADDR LocalAddr;
     std::memset(&LocalAddr, 0, sizeof(LocalAddr));
     LocalAddr.Ipv4.sin_port = QuicNetByteSwapShort(Port);
 
-    Status = MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &LocalAddr);
-    if (QUIC_FAILED(Status))
+    QStatus = MsQuic->ListenerStart(pImpl->Listener, &Alpn, 1, &LocalAddr);
+    if (QUIC_FAILED(QStatus))
     {
-        printf("Failed with status %d\n", (int)Status);
-        throw std::runtime_error("Failed to start listener");
+        *Status = (int32_t)QStatus;
+        return;
     }
+
+    *Status = 0;
 }
 
-QuicConnection::QuicConnection() = default;
+QuicConnection::QuicConnection() noexcept = default;
 
 void QuicConnection::Disconnect()
 {
