@@ -18,20 +18,20 @@ static void DisconnectHandler() {
     DisconnectEvent.Set();
 }
 
-static void HandleStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers) {
+static void HandleStreamData(wpi::span<const qapi::DataBuffer> Buffers) {
     (void)Buffers;
 }
 
-static void HandleControlStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers) {
+static void HandleControlStreamData(wpi::span<const qapi::DataBuffer> Buffers) {
     (void)Buffers;
 }
 
-static void HandleDatagramData(const QuicConnection::DataBuffer& Buffer) {
+static void HandleDatagramData(const qapi::DataBuffer& Buffer) {
     (void)Buffer;
 }
 
 void DsCommThread() {
-    QuicConnection::Callbacks Callbacks {
+    qapi::Callbacks Callbacks {
         ReadyHandler,
         DisconnectHandler,
         HandleDatagramData,

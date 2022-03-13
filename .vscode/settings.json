@@ -87,6 +87,7 @@
         "stack": "cpp",
         "xiosbase": "cpp",
         "xutility": "cpp",
-        "__tree": "cpp"
+        "__tree": "cpp",
+        "queue": "cpp"
     }
 }
