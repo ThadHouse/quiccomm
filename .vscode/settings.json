@@ -88,6 +88,9 @@
         "xiosbase": "cpp",
         "xutility": "cpp",
         "__tree": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "quicconnection.h": "c",
+        "msquic.h": "c",
+        "msquic_winuser.h": "c"
     }
 }

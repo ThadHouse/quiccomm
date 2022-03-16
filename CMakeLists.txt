@@ -40,10 +40,12 @@ add_subdirectory(allwpilib)
 
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-add_subdirectory(common)
+add_subdirectory(quic)
+
+#add_subdirectory(common)
 #add_subdirectory(ds)
 #add_subdirectory(dsapp)
-add_subdirectory(driverstation)
+#add_subdirectory(driverstation)
 #add_subdirectory(netcomm)
 #add_subdirectory(netcommapp)
-add_subdirectory(netcommdaemon)
+#add_subdirectory(netcommdaemon)
