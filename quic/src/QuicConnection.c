@@ -29,12 +29,20 @@ struct QuicListener {
     uint8_t Alpn[0];
 };
 
+typedef struct QuicStream {
+    HQUIC Stream;
+    QuicConnection* Parent;
+    uint32_t Index;
+} QuicStream;
+
 struct QuicConnection {
     const QuicRegistration* Registration;
     HQUIC Connection;
+    HQUIC Configuration;
     QuicConnectionCallbacks Callbacks;
     uint32_t NumStreams;
-    HQUIC Streams[0];
+    uint32_t NumCurrentStreams;
+    QuicStream Streams[0];
 };
 
 QuicConnStatus QC_GetRegistration(const char* Name, QuicConnBoolean UseSingleThread, QuicRegistration** Registration) {
@@ -101,6 +109,10 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context, QUIC
         NewConnection->NumStreams = QListener->NumStreams;
         NewConnection->Registration = QListener->Registration;
         NewConnection->Connection = Event->NEW_CONNECTION.Connection;
+        for (uint32_t i = 0; i < NewConnection->NumStreams; i++) {
+            NewConnection->Streams[i].Parent = NewConnection;
+            NewConnection->Streams[i].Index = i;
+        }
 
         QUIC_STATUS Status = QListener->Registration->QuicApi->ConnectionSetConfiguration(NewConnection->Connection, QListener->Configuration);
         if(QUIC_FAILED(Status)) {
@@ -212,12 +224,194 @@ void QC_FreeListener(QuicListener* Listener) {
     }
 }
 
+static void OnConnectionReady(QuicConnection* Connection) {
+    QuicStream* Stream;
+    Connection->Callbacks.ReadyCallback(Connection->Callbacks.Context);
+    for (uint32_t i = 0; i < Connection->NumStreams; i++) {
+        Stream = &Connection->Streams[i];
+        Connection->Registration->QuicApi->StreamReceiveSetEnabled(Stream->Stream, TRUE);
+    }
+}
+
+static QUIC_STATUS QUIC_API StreamCallback(HQUIC Stream, void* Context, QUIC_STREAM_EVENT* Event) {
+    UNREFERENCED_PARAMETER(Stream);
+    QuicStream* QStream = (QuicStream*)Context;
+    QuicConnection* QConnection = QStream->Parent;
+
+    switch (Event->Type) {
+        case QUIC_STREAM_EVENT_START_COMPLETE:
+            if (QUIC_FAILED(Event->START_COMPLETE.Status)) {
+                return QUIC_STATUS_INVALID_STATE;
+            }
+
+            QConnection->NumCurrentStreams++;
+            if (QConnection->NumCurrentStreams == QConnection->NumStreams) {
+                OnConnectionReady(QConnection);
+            }
+            break;
+        case QUIC_STREAM_EVENT_RECEIVE:
+            if (QConnection->NumStreams != QConnection->NumCurrentStreams) {
+                Event->RECEIVE.TotalBufferLength = 0;
+                return QUIC_STATUS_SUCCESS;
+            }
+            QConnection->Callbacks.StreamDataCallback(QConnection->Callbacks.Context, QStream->Index, (const QuicDataBuffer*)Event->RECEIVE.Buffers, Event->RECEIVE.BufferCount);
+            break;
+        case QUIC_STREAM_EVENT_SEND_COMPLETE:
+            free(Event->SEND_COMPLETE.ClientContext);
+            break;
+        case QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE:
+            // Shutdown connection if a stream ever shuts down.
+            QConnection->Registration->QuicApi->ConnectionShutdown(QConnection->Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+            break;
+    }
+    return QUIC_STATUS_SUCCESS;
+}
+
 static QUIC_STATUS QUIC_API ConnectionCallback(HQUIC Connection, void* Context, QUIC_CONNECTION_EVENT* Event) {
-    (void)Connection;
-    (void)Context;
-    (void)Event;
+    UNREFERENCED_PARAMETER(Connection);
+    QuicConnection* QConnection = (QuicConnection*)Context;
+    QuicStream* Stream;
+    QUIC_STATUS ParamStatus;
+    uint32_t BufferLength;
+    QUIC_UINT62 StreamId;
+
+    switch (Event->Type) {
+        case QUIC_CONNECTION_EVENT_DATAGRAM_RECEIVED:
+            // Ignore if we haven't sent ready event
+            if (QConnection->NumStreams == QConnection->NumCurrentStreams) {
+                QConnection->Callbacks.DatagramDataCallback(QConnection->Callbacks.Context, (const QuicDataBuffer*)Event->DATAGRAM_RECEIVED.Buffer);
+            }
+        break;
+        case QUIC_CONNECTION_EVENT_DATAGRAM_SEND_STATE_CHANGED:
+            if (QUIC_DATAGRAM_SEND_STATE_IS_FINAL(Event->DATAGRAM_SEND_STATE_CHANGED.State)) {
+                free(Event->DATAGRAM_SEND_STATE_CHANGED.ClientContext);
+            }
+        break;
+        case QUIC_CONNECTION_EVENT_SHUTDOWN_COMPLETE:
+            QConnection->Callbacks.DisconnectedCallback(QConnection->Callbacks.Context);
+        break;
+        case QUIC_CONNECTION_EVENT_PEER_STREAM_STARTED:
+            if (QConnection->NumCurrentStreams == QConnection->NumStreams) {
+                return QUIC_STATUS_INVALID_STATE;
+            }
+
+            BufferLength = sizeof(StreamId);
+            ParamStatus = QConnection->Registration->QuicApi->GetParam(Event->PEER_STREAM_STARTED.Stream, QUIC_PARAM_STREAM_ID, &BufferLength, &StreamId);
+            if (QUIC_FAILED(ParamStatus)) {
+                return ParamStatus;
+            }
+
+            if ((StreamId & 0x3) != 0) {
+                return QUIC_STATUS_INVALID_STATE;
+            }
+
+            StreamId >>= 2;
+            if (StreamId >= QConnection->NumStreams) {
+                return QUIC_STATUS_INVALID_STATE;
+            }
+
+            Stream = &QConnection->Streams[StreamId];
+            Stream->Stream = Event->PEER_STREAM_STARTED.Stream;
+            QConnection->Registration->QuicApi->SetCallbackHandler(Stream->Stream, (void*)StreamCallback, Stream);
+            QConnection->NumCurrentStreams++;
+
+            if (QConnection->NumCurrentStreams == QConnection->NumStreams) {
+                OnConnectionReady(QConnection);
+            }
+            break;
+    }
 
     return QUIC_STATUS_SUCCESS;
+}
+
+QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection) {
+    QUIC_STATUS Status;
+
+    QUIC_BUFFER AlpnBuffer;
+    QUIC_SETTINGS Settings;
+    QUIC_CREDENTIAL_CONFIG CredConfig;
+    QuicStream* Stream;
+    QuicConnection* NewConnection = malloc(sizeof(QuicConnection) + NumStreams);
+    if (!NewConnection) {
+        return QUIC_STATUS_OUT_OF_MEMORY;
+    }
+    memset(NewConnection, 0, sizeof(*NewConnection) + NumStreams);
+    NewConnection->NumStreams = NumStreams;
+    NewConnection->Registration = Registration;
+    NewConnection->Callbacks = *Callbacks;
+    for (uint32_t i = 0; i < NewConnection->NumStreams; i++) {
+        NewConnection->Streams[i].Parent = NewConnection;
+        NewConnection->Streams[i].Index = i;
+    }
+
+    AlpnBuffer.Buffer = Alpn;
+    AlpnBuffer.Length = AlpnLength;
+
+    Settings.IsSetFlags = 0;
+    Settings.IsSet.KeepAliveIntervalMs = 1;
+    Settings.KeepAliveIntervalMs = 1000; // TODO Make this configurable
+    Settings.IsSet.DatagramReceiveEnabled = 1;
+    Settings.DatagramReceiveEnabled = 1;
+    Settings.IsSet.IdleTimeoutMs = 1;
+    Settings.IdleTimeoutMs = 2000; // TODO Make this configurable
+
+    Status = Registration->QuicApi->ConfigurationOpen(Registration->Registration, &AlpnBuffer, 1, &Settings, sizeof(Settings), NULL, &NewConnection->Configuration);
+    if (QUIC_FAILED(Status)) {
+        goto Exit;
+    }
+
+    memset(&CredConfig, 0, sizeof(CredConfig));
+    CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT;
+    if (!ValidateCertificate) {
+        CredConfig.Flags |= QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
+    }
+
+    Status = Registration->QuicApi->ConfigurationLoadCredential(NewConnection->Configuration, &CredConfig);
+    if (QUIC_FAILED(Status)) {
+        goto Exit;
+    }
+
+    Status = Registration->QuicApi->ConnectionOpen(Registration->Registration, ConnectionCallback, NewConnection, &NewConnection->Connection);
+    if (QUIC_FAILED(Status)) {
+        goto Exit;
+    }
+
+    for (uint32_t i = 0; i < NumStreams; i++) {
+        Stream = &NewConnection->Streams[i];
+        Status = Registration->QuicApi->StreamOpen(NewConnection->Connection, QUIC_STREAM_OPEN_FLAG_NONE, StreamCallback, Stream, &Stream->Stream);
+        if (QUIC_FAILED(Status)) {
+            goto Exit;
+        }
+
+        Status = Registration->QuicApi->StreamStart(Stream->Stream, QUIC_STREAM_START_FLAG_IMMEDIATE);
+    }
+
+    Status = Registration->QuicApi->ConnectionStart(NewConnection->Connection, NewConnection->Configuration, QUIC_ADDRESS_FAMILY_UNSPEC, Host, Port);
+    if (QUIC_FAILED(Status)) {
+        goto Exit;
+    }
+
+    Status = QUIC_STATUS_SUCCESS;
+    *Connection = NewConnection;
+    NewConnection = NULL;
+
+Exit:
+    if (NewConnection) {
+        for (uint32_t i = 0; i < NewConnection->NumStreams; i++) {
+            if (NewConnection->Streams[i].Stream) {
+                Registration->QuicApi->StreamClose(NewConnection->Streams[i].Stream);
+            }
+        }
+        if (NewConnection->Connection) {
+            Registration->QuicApi->ConnectionClose(NewConnection->Connection);
+        }
+        if (NewConnection->Configuration) {
+            Registration->QuicApi->ConfigurationClose(NewConnection->Configuration);
+        }
+        free(NewConnection);
+    }
+
+    return Status;
 }
 
 void QC_SetConnectionContext(QuicConnection* Connection, QuicConnectionCallbacks* Callbacks) {
@@ -232,9 +426,14 @@ void QC_ShutdownConnection(QuicConnection* Connection) {
 void QC_FreeConnection(QuicConnection* Connection) {
     if (Connection) {
         for (uint32_t i = 0; i < Connection->NumStreams; i++) {
-            Connection->Registration->QuicApi->StreamClose(Connection->Streams[i]);
+            if (Connection->Streams[i].Stream) {
+                Connection->Registration->QuicApi->StreamClose(Connection->Streams[i].Stream);
+            }
         }
         Connection->Registration->QuicApi->ConnectionClose(Connection->Connection);
+        if (Connection->Configuration) {
+            Connection->Registration->QuicApi->ConfigurationClose(Connection->Configuration);
+        }
         free(Connection);
     }
 }

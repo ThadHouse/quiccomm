@@ -25,7 +25,7 @@ typedef void(QUIC_CONN_API * QuicListenerStoppedCallback)(void* Context);
 typedef void(QUIC_CONN_API * QuicConnectionReadyCallback)(void* Context);
 typedef void(QUIC_CONN_API * QuicConnectionDisconnectedCallback)(void* Context);
 typedef void(QUIC_CONN_API * QuicConnectionDatagramDataCallback)(void* Context, const QuicDataBuffer* DataBuffer);
-typedef void(QUIC_CONN_API * QuicConnectionStreamDataCallback)(uint32_t StreamId, void* Context, const QuicDataBuffer* DataBuffers, uint32_t DataBuffersSize);
+typedef void(QUIC_CONN_API * QuicConnectionStreamDataCallback)(void* Context, uint32_t StreamId, const QuicDataBuffer* DataBuffers, uint32_t DataBuffersSize);
 
 typedef struct QuicListenerCallbacks {
     QuicListenerNewConnectionCallback NewConnectionCallback;
@@ -34,8 +34,8 @@ typedef struct QuicListenerCallbacks {
 } QuicListenerCallbacks;
 
 typedef struct QuicConnectionCallbacks {
-    QuicConnectionReadyCallback NewConnectionCallback;
-    QuicConnectionDisconnectedCallback StoppedCallback;
+    QuicConnectionReadyCallback ReadyCallback;
+    QuicConnectionDisconnectedCallback DisconnectedCallback;
     QuicConnectionDatagramDataCallback DatagramDataCallback;
     QuicConnectionStreamDataCallback StreamDataCallback;
 
@@ -58,6 +58,9 @@ void QC_StopListener(QuicListener* Listener);
 void QC_FreeListener(QuicListener* Listener);
 
 void QC_SetConnectionContext(QuicConnection* Connection, QuicConnectionCallbacks* Callbacks);
+
+QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection);
+
 void QC_ShutdownConnection(QuicConnection* Connection);
 void QC_FreeConnection(QuicConnection* Connection);
 
