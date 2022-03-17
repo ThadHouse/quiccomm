@@ -49,7 +49,7 @@ extern "C" {
 QuicConnStatus QC_GetRegistration(const char* Name, QuicConnBoolean UseSingleThread, QuicRegistration** Registration);
 void QC_FreeRegistration(QuicRegistration* Registration);
 
-QuicConnStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener);
+QuicConnStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, const uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener);
 QuicConnStatus QC_StartListener(QuicListener* Listener);
 void QC_StopListener(QuicListener* Listener);
 
@@ -59,7 +59,7 @@ void QC_FreeListener(QuicListener* Listener);
 
 void QC_SetConnectionContext(QuicConnection* Connection, QuicConnectionCallbacks* Callbacks);
 
-QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection);
+QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection);
 
 void QC_ShutdownConnection(QuicConnection* Connection);
 void QC_FreeConnection(QuicConnection* Connection);

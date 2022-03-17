@@ -11,6 +11,10 @@
 #include "msquic.h"
 #include <stdlib.h>
 
+#ifndef UNREFERENCED_PARAMETER
+#define UNREFERENCED_PARAMETER(P) (void)(P)
+#endif
+
 #define BYTESWAPSHORT(x) ((uint16_t)((((x) & 0x00ff) << 8) | (((x) & 0xff00) >> 8)))
 
 struct QuicRegistration {
@@ -132,7 +136,7 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context, QUIC
     return QUIC_STATUS_SUCCESS;
 }
 
-QuicConnStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener) {
+QuicConnStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, const uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener) {
     QUIC_STATUS Status;
     QuicListener* NewListener = malloc(sizeof(QuicListener) + AlpnLength);
     if (!NewListener) {
@@ -263,6 +267,8 @@ static QUIC_STATUS QUIC_API StreamCallback(HQUIC Stream, void* Context, QUIC_STR
             // Shutdown connection if a stream ever shuts down.
             QConnection->Registration->QuicApi->ConnectionShutdown(QConnection->Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
             break;
+        default:
+            break;
     }
     return QUIC_STATUS_SUCCESS;
 }
@@ -319,15 +325,20 @@ static QUIC_STATUS QUIC_API ConnectionCallback(HQUIC Connection, void* Context, 
                 OnConnectionReady(QConnection);
             }
             break;
+        default:
+            break;
     }
 
     return QUIC_STATUS_SUCCESS;
 }
 
-QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection) {
+QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection) {
     QUIC_STATUS Status;
 
-    QUIC_BUFFER AlpnBuffer;
+    const QUIC_BUFFER AlpnBuffer = {
+        .Buffer = (uint8_t*)Alpn,
+        .Length = AlpnLength
+    };
     QUIC_SETTINGS Settings;
     QUIC_CREDENTIAL_CONFIG CredConfig;
     QuicStream* Stream;
@@ -344,9 +355,6 @@ QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, c
         NewConnection->Streams[i].Index = i;
     }
 
-    AlpnBuffer.Buffer = Alpn;
-    AlpnBuffer.Length = AlpnLength;
-
     Settings.IsSetFlags = 0;
     Settings.IsSet.KeepAliveIntervalMs = 1;
     Settings.KeepAliveIntervalMs = 1000; // TODO Make this configurable
@@ -361,7 +369,8 @@ QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, c
     }
 
     memset(&CredConfig, 0, sizeof(CredConfig));
-    CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT;
+    CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT | QUIC_CREDENTIAL_FLAG_SET_ALLOWED_CIPHER_SUITES;
+    CredConfig.AllowedCipherSuites = QUIC_ALLOWED_CIPHER_SUITE_CHACHA20_POLY1305_SHA256;
     if (!ValidateCertificate) {
         CredConfig.Flags |= QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
     }
