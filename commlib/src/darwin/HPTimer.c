@@ -21,8 +21,8 @@ static int move_pthread_to_realtime_scheduling_class(pthread_t pthread,
 
     thread_time_constraint_policy_data_t policy;
     policy.period = timems * clock2abs;
-    policy.computation = (timems / 10) * clock2abs;
-    policy.constraint = (timems / 3) * clock2abs;
+    policy.computation = (timems / 3) * clock2abs;
+    policy.constraint = (timems / 2) * clock2abs;
     policy.preemptible = TRUE;
 
     int kr = thread_policy_set(

@@ -92,6 +92,7 @@
         "quicconnection.h": "c",
         "msquic.h": "c",
         "msquic_winuser.h": "c",
-        "stdatomic.h": "c"
+        "stdatomic.h": "c",
+        "sched.h": "c"
     }
 }
