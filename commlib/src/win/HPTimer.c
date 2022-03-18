@@ -1,5 +1,6 @@
 #include "HPTimer.h"
 #include "Windows.h"
+#include <process.h>
 
 struct HPTimer {
     HPTimer_Callback Callback;
@@ -24,9 +25,9 @@ static LARGE_INTEGER TimeUs64ToPlat(uint64_t TimeUs) {
     return Ret;
 }
 
-static DWORD WINAPI ThreadMain(LPVOID Parameter) {
+static unsigned int WINAPI ThreadMain(void* Context) {
     DWORD Status = 0;
-    HPTimer* Thread = (HPTimer*)Parameter;
+    HPTimer* Thread = (HPTimer*)Context;
     HANDLE Timer = CreateWaitableTimerA(NULL, FALSE, NULL);
     if (Timer == NULL) {
         Status = GetLastError();
@@ -77,7 +78,6 @@ CommLibStatus COMMLIB_API HPTimer_Initialize(HPTimer_Callback Callback,
     NewThread->Callback = Callback;
     NewThread->Context = Context;
     NewThread->PeriodMs = PeriodMs;
-
     NewThread->ThreadRunning = 1;
 
     NewThread->ReadyEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
@@ -87,9 +87,10 @@ CommLibStatus COMMLIB_API HPTimer_Initialize(HPTimer_Callback Callback,
         goto Exit;
     }
 
-    NewThread->Thread = CreateThread(NULL, 0, ThreadMain, NewThread, 0, NULL);
+    NewThread->Thread =
+        (HANDLE)_beginthreadex(NULL, 0, ThreadMain, NewThread, 0, NULL);
     if (NewThread->Thread == NULL) {
-        LastError = GetLastError();
+        LastError = errno;
         Status = HRESULT_FROM_WIN32(LastError);
         goto Exit;
     }
@@ -124,7 +125,7 @@ Exit:
         if (NewThread->ReadyEvent) {
             CloseHandle(NewThread->ReadyEvent);
         }
-        free(Thread);
+        free(NewThread);
     }
     return Status;
 }

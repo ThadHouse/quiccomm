@@ -5,7 +5,7 @@ set (SOURCES
 if (APPLE)
 set (PLAT_SOURCES src/darwin/HPTimer.c)
 elseif (WIN32)
-set (PLAT_SOURCES src/win/HPTimer.c)
+set (PLAT_SOURCES src/win/HPTimer.c src/win/CPThread.c)
 else()
 set (PLAT_SOURCES src/unix/HPTimer.c)
 endif()
