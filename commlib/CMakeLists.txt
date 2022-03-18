@@ -3,11 +3,11 @@ set (SOURCES
 )
 
 if (APPLE)
-set (PLAT_SOURCES src/darwin/HPTimer.c)
+set (PLAT_SOURCES src/darwin/HPTimer.c src/posix/CPThread.c)
 elseif (WIN32)
 set (PLAT_SOURCES src/win/HPTimer.c src/win/CPThread.c)
 else()
-set (PLAT_SOURCES src/unix/HPTimer.c)
+set (PLAT_SOURCES src/linux/HPTimer.c src/posix/CPThread.c)
 endif()
 
 add_library(commlib STATIC ${SOURCES} ${PLAT_SOURCES})

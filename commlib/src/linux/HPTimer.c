@@ -104,6 +104,13 @@ CommLibStatus COMMLIB_API HPTimer_Initialize(HPTimer_Callback Callback,
     NewThread = NULL;
 
 Exit:
+    if (NewThread) {
+        atomic_store(&NewThread->ThreadRunning, 0);
+        if (NewThread->Thread) {
+            pthread_join(NewThread->Thread, NULL);
+        }
+        free(NewThread);
+    }
 
     return Status;
 }
