@@ -1,7 +1,7 @@
 #include "QuicConnection.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include "HPThread.h"
+#include "HPTimer.h"
 #include <unistd.h>
 
 static
@@ -24,15 +24,15 @@ static
 void
 ThreadCallback(void* Context) {
     (void)Context;
-    uint64_t Current = HPThread_GetTimeUs();
+    uint64_t Current = HPTimer_GetTimeUs();
     printf("Delta %llu\n", Current - LastTime);
     LastTime = Current;
     //usleep(5000);
 }
 
 int main() {
-    HPThread* Thread;
-    CommLibStatus Status = HPThread_Initialize(ThreadCallback, NULL, 20, &Thread);
+    HPTimer* Thread;
+    CommLibStatus Status = HPTimer_Initialize(ThreadCallback, NULL, 20, &Thread);
     printf("Thread Status %d\n", Status);
 
     QuicRegistration* Registration = NULL;

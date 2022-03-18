@@ -1,6 +1,6 @@
 set (SOURCES
     src/QuicConnection.c
-    src/darwin/HPThread.c
+    src/darwin/HPTimer.c
 )
 
 add_library(commlib STATIC ${SOURCES})

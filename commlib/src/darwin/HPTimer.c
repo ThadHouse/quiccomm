@@ -1,4 +1,4 @@
-#include "HPThread.h"
+#include "HPTimer.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,13 +38,13 @@ int move_pthread_to_realtime_scheduling_class(pthread_t pthread, uint32_t timems
 #define NANOS_PER_USEC (1000ULL)
 #define NANOS_PER_MILLISEC (1000ULL * NANOS_PER_USEC)
 
-uint64_t HPThread_GetTimeUs(void) {
+uint64_t HPTimer_GetTimeUs(void) {
     uint64_t nanos = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     return nanos / NANOS_PER_USEC;
 }
 
-struct HPThread {
-    HPThread_Callback Callback;
+struct HPTimer {
+    HPTimer_Callback Callback;
     void* Context;
     uint32_t PeriodMs;
     int32_t ThreadRunning;
@@ -54,7 +54,7 @@ struct HPThread {
 static
 void*
 ThreadCallback(void* Context) {
-    HPThread* Thread = (HPThread*)Context;
+    HPTimer* Thread = (HPTimer*)Context;
     mach_timebase_info_data_t timebase_info;
     uint64_t period_nanos = Thread->PeriodMs * NANOS_PER_MILLISEC;
     mach_timebase_info(&timebase_info);
@@ -76,9 +76,9 @@ ThreadCallback(void* Context) {
     return NULL;
 }
 
-CommLibStatus HPThread_Initialize(HPThread_Callback Callback, void* Context, uint32_t PeriodMs, HPThread** Thread) {
+CommLibStatus HPTimer_Initialize(HPTimer_Callback Callback, void* Context, uint32_t PeriodMs, HPTimer** Thread) {
     CommLibStatus Status;
-    HPThread* NewThread = malloc(sizeof(HPThread));
+    HPTimer* NewThread = malloc(sizeof(HPTimer));
     if (!NewThread) {
         return ENOMEM;
     }
@@ -114,7 +114,7 @@ Exit:
     return Status;
 }
 
-void HPThread_Free(HPThread* Thread) {
+void HPTimer_Free(HPTimer* Thread) {
     Thread->ThreadRunning = 0;
     pthread_join(Thread->Thread, NULL);
     free(Thread);
