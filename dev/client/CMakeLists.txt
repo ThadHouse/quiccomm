@@ -3,4 +3,4 @@ set (SOURCES
 )
 
 add_executable(quicclient ${SOURCES})
-target_link_libraries(quicclient quicconn_static wpiutil)
+target_link_libraries(quicclient commlib)

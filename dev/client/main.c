@@ -1,25 +1,42 @@
 #include "QuicConnection.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include "HPThread.h"
+#include <unistd.h>
 
 static
-QUIC_CONN_API
+COMMLIB_API
 void ConnReady(void* Context) {
     (void)Context;
     printf("Conn REady\n");
 }
 
 static
-QUIC_CONN_API
+COMMLIB_API
 void ConnDisconnect(void* Context) {
     (void)Context;
     printf("Conn Disconnect\n");
 }
 
+uint64_t LastTime = 0;
+
+static
+void
+ThreadCallback(void* Context) {
+    (void)Context;
+    uint64_t Current = HPThread_GetTimeUs();
+    printf("Delta %llu\n", Current - LastTime);
+    LastTime = Current;
+    //usleep(5000);
+}
 
 int main() {
+    HPThread* Thread;
+    CommLibStatus Status = HPThread_Initialize(ThreadCallback, NULL, 20, &Thread);
+    printf("Thread Status %d\n", Status);
+
     QuicRegistration* Registration = NULL;
-    QuicConnStatus Status = QC_GetRegistration("Client", 1, &Registration);
+    Status = QC_GetRegistration("Client", 1, &Registration);
     printf("Reg Status %d\n", Status);
 
     QuicConnectionCallbacks Callbacks;

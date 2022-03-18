@@ -4,8 +4,8 @@
 #include <stdio.h>
 
 static
-QUIC_CONN_API
-QuicConnBoolean
+COMMLIB_API
+CommLibBoolean
 ListenerCallback(QuicConnection* Connection, void* Context) {
     (void)Connection;
     (void)Context;
@@ -13,7 +13,7 @@ ListenerCallback(QuicConnection* Connection, void* Context) {
     return 0;
 }
 
-static QUIC_CONN_API
+static COMMLIB_API
 void ListenerStoppedCallback(void* Context) {
     (void)Context;
     printf("Listener Stopped\n");
@@ -25,7 +25,7 @@ int main() {
     const uint8_t* Cert = QC_InternalGetCertificate(&CertLength, &Password);
 
     QuicRegistration* Registration = NULL;
-    QuicConnStatus Status = QC_GetRegistration("Server", 1, &Registration);
+    CommLibStatus Status = QC_GetRegistration("Server", 1, &Registration);
     printf("Reg Status %d\n", Status);
 
     QuicListener* Listener = NULL;

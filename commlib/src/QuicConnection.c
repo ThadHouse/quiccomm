@@ -49,7 +49,7 @@ struct QuicConnection {
     QuicStream Streams[0];
 };
 
-QuicConnStatus QC_GetRegistration(const char* Name, QuicConnBoolean UseSingleThread, QuicRegistration** Registration) {
+CommLibStatus QC_GetRegistration(const char* Name, CommLibBoolean UseSingleThread, QuicRegistration** Registration) {
     QUIC_STATUS Status;
     QuicRegistration* NewRegistration = malloc(sizeof(QuicRegistration));
 
@@ -124,7 +124,7 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context, QUIC
             return Status;
         }
 
-        QuicConnBoolean KeepConnection = QListener->Callbacks.NewConnectionCallback(NewConnection, QListener->Callbacks.Context);
+        CommLibBoolean KeepConnection = QListener->Callbacks.NewConnectionCallback(NewConnection, QListener->Callbacks.Context);
         if (!KeepConnection) {
             free(NewConnection);
             return QUIC_STATUS_INVALID_STATE;
@@ -136,7 +136,7 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context, QUIC
     return QUIC_STATUS_SUCCESS;
 }
 
-QuicConnStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, const uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener) {
+CommLibStatus QC_CreateListener(const QuicRegistration* Registration, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, const uint8_t* PfxBuffer, uint32_t PfxSize, const char* PfxPassword, uint32_t NumStreams, QuicListenerCallbacks* Callbacks, QuicListener** Listener) {
     QUIC_STATUS Status;
     QuicListener* NewListener = malloc(sizeof(QuicListener) + AlpnLength);
     if (!NewListener) {
@@ -206,7 +206,7 @@ Exit:
     return Status;
 }
 
-QuicConnStatus QC_StartListener(QuicListener* Listener) {
+CommLibStatus QC_StartListener(QuicListener* Listener) {
     QUIC_BUFFER AlpnBuffer;
     AlpnBuffer.Buffer = Listener->Alpn;
     AlpnBuffer.Length = Listener->AlpnLength;
@@ -332,7 +332,7 @@ static QUIC_STATUS QUIC_API ConnectionCallback(HQUIC Connection, void* Context, 
     return QUIC_STATUS_SUCCESS;
 }
 
-QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, QuicConnBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection) {
+CommLibStatus QC_CreateClientConnection(const QuicRegistration* Registration, const char* Host, uint16_t Port, const uint8_t* Alpn, uint16_t AlpnLength, uint32_t NumStreams, CommLibBoolean ValidateCertificate, QuicConnectionCallbacks* Callbacks, QuicConnection** Connection) {
     QUIC_STATUS Status;
 
     const QUIC_BUFFER AlpnBuffer = {
