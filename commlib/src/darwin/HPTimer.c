@@ -7,6 +7,7 @@
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <pthread.h>
+#include "stdatomic.h"
 
 static
 int move_pthread_to_realtime_scheduling_class(pthread_t pthread, uint32_t timems)
@@ -47,7 +48,7 @@ struct HPTimer {
     HPTimer_Callback Callback;
     void* Context;
     uint32_t PeriodMs;
-    int32_t ThreadRunning;
+    atomic_bool ThreadRunning;
     pthread_t Thread;
 };
 
@@ -60,7 +61,7 @@ ThreadCallback(void* Context) {
     mach_timebase_info(&timebase_info);
     uint64_t period = period_nanos * timebase_info.denom / timebase_info.numer;
     uint64_t time_to_wait = period;
-    while (Thread->ThreadRunning) {
+    while (atomic_load(&Thread->ThreadRunning)) {
         uint64_t next_wake = mach_absolute_time() + time_to_wait;
         mach_wait_until(next_wake);
         uint64_t proc_start = mach_absolute_time();
@@ -87,7 +88,7 @@ CommLibStatus HPTimer_Initialize(HPTimer_Callback Callback, void* Context, uint3
     NewThread->Callback = Callback;
     NewThread->Context = Context;
     NewThread->PeriodMs = PeriodMs;
-    NewThread->ThreadRunning = 1;
+    atomic_init(&NewThread->ThreadRunning, 1);
 
     Status = pthread_create(&NewThread->Thread, NULL, ThreadCallback, NewThread);
     if (COMMLIB_FAILED(Status)) {
@@ -105,7 +106,7 @@ CommLibStatus HPTimer_Initialize(HPTimer_Callback Callback, void* Context, uint3
 
 Exit:
     if (NewThread) {
-        NewThread->ThreadRunning = 0;
+        atomic_store(&NewThread->ThreadRunning, 0);
         if (NewThread->Thread) {
             pthread_join(NewThread->Thread, NULL);
         }
@@ -115,7 +116,7 @@ Exit:
 }
 
 void HPTimer_Free(HPTimer* Thread) {
-    Thread->ThreadRunning = 0;
+    atomic_store(&Thread->ThreadRunning, 0);
     pthread_join(Thread->Thread, NULL);
     free(Thread);
 }

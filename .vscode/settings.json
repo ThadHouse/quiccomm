@@ -91,6 +91,7 @@
         "queue": "cpp",
         "quicconnection.h": "c",
         "msquic.h": "c",
-        "msquic_winuser.h": "c"
+        "msquic_winuser.h": "c",
+        "stdatomic.h": "c"
     }
 }
