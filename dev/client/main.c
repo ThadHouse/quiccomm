@@ -18,9 +18,9 @@ uint64_t LastTime = 0;
 static void COMMLIB_API ThreadCallback(void* Context) {
     (void)Context;
     uint64_t Current = HPTimer_GetTimeUs();
-    printf("Delta %llu\n", Current - LastTime);
+    printf("Delta %llu\n", (long long unsigned)(Current - LastTime));
     LastTime = Current;
-    HPTimer_SleepMs(5);
+    HPTimer_SleepMs(9);
 }
 
 int main() {
