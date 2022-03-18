@@ -377,7 +377,13 @@ CommLibStatus QC_CreateClientConnection(const QuicRegistration* Registration, co
 
     Status = Registration->QuicApi->ConfigurationLoadCredential(NewConnection->Configuration, &CredConfig);
     if (QUIC_FAILED(Status)) {
-        goto Exit;
+        // Likely schannel, try removing cipher suite
+        CredConfig.Flags &= ~QUIC_CREDENTIAL_FLAG_SET_ALLOWED_CIPHER_SUITES;
+        CredConfig.AllowedCipherSuites = 0;
+        Status = Registration->QuicApi->ConfigurationLoadCredential(NewConnection->Configuration, &CredConfig);
+        if (QUIC_FAILED(Status)) {
+            goto Exit;
+        }
     }
 
     Status = Registration->QuicApi->ConnectionOpen(Registration->Registration, ConnectionCallback, NewConnection, &NewConnection->Connection);
