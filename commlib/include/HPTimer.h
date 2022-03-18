@@ -3,7 +3,7 @@
 #include "CommTypes.h"
 #include <stdint.h>
 
-typedef void (COMMLIB_API * HPTimer_Callback)(void* Context);
+typedef void(COMMLIB_API* HPTimer_Callback)(void* Context);
 
 typedef struct HPTimer HPTimer;
 
@@ -11,11 +11,13 @@ typedef struct HPTimer HPTimer;
 extern "C" {
 #endif
 
-CommLibStatus HPTimer_Initialize(HPTimer_Callback Callback, void* Context, uint32_t PeriodMs, HPTimer** Thread);
+CommLibStatus COMMLIB_API HPTimer_Initialize(HPTimer_Callback Callback,
+                                             void* Context, uint32_t PeriodMs,
+                                             HPTimer** Thread);
 
-void HPTimer_Free(HPTimer* Thread);
+void COMMLIB_API HPTimer_Free(HPTimer* Thread);
 
-uint64_t HPTimer_GetTimeUs(void);
+uint64_t COMMLIB_API HPTimer_GetTimeUs(void);
 
 #ifdef __cplusplus
 }

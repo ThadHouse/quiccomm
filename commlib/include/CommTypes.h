@@ -4,7 +4,7 @@
 
 typedef int32_t CommLibStatus;
 
-#define COMMLIB_FAILED(X)                  ((int)(X) > 0)
+#define COMMLIB_FAILED(X) ((int)(X) > 0)
 
 #ifdef _WIN32
 #define COMMLIB_API __cdecl
