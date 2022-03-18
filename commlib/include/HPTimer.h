@@ -19,6 +19,8 @@ void COMMLIB_API HPTimer_Free(HPTimer* Thread);
 
 uint64_t COMMLIB_API HPTimer_GetTimeUs(void);
 
+void COMMLIB_API HPTimer_SleepMs(uint32_t TimeMs);
+
 #ifdef __cplusplus
 }
 #endif

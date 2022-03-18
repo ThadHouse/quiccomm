@@ -2,37 +2,31 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "HPTimer.h"
-#include <unistd.h>
 
-static
-COMMLIB_API
-void ConnReady(void* Context) {
+static void COMMLIB_API ConnReady(void* Context) {
     (void)Context;
     printf("Conn REady\n");
 }
 
-static
-COMMLIB_API
-void ConnDisconnect(void* Context) {
+static void COMMLIB_API ConnDisconnect(void* Context) {
     (void)Context;
     printf("Conn Disconnect\n");
 }
 
 uint64_t LastTime = 0;
 
-static
-void
-ThreadCallback(void* Context) {
+static void COMMLIB_API ThreadCallback(void* Context) {
     (void)Context;
     uint64_t Current = HPTimer_GetTimeUs();
     printf("Delta %llu\n", Current - LastTime);
     LastTime = Current;
-    //usleep(5000);
+    HPTimer_SleepMs(5);
 }
 
 int main() {
     HPTimer* Thread;
-    CommLibStatus Status = HPTimer_Initialize(ThreadCallback, NULL, 20, &Thread);
+    CommLibStatus Status =
+        HPTimer_Initialize(ThreadCallback, NULL, 20, &Thread);
     printf("Thread Status %d\n", Status);
 
     QuicRegistration* Registration = NULL;
@@ -43,7 +37,9 @@ int main() {
     Callbacks.ReadyCallback = ConnReady;
     Callbacks.DisconnectedCallback = ConnDisconnect;
     QuicConnection* Connection = NULL;
-    Status = QC_CreateClientConnection(Registration, "localhost", 1360, (const uint8_t*)"frc", 3, 3, 0, &Callbacks, &Connection);
+    Status = QC_CreateClientConnection(Registration, "localhost", 1360,
+                                       (const uint8_t*)"frc", 3, 3, 0,
+                                       &Callbacks, &Connection);
     printf("Conn Status %d\n", Status);
 
     getchar();

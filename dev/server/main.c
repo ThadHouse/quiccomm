@@ -4,17 +4,16 @@
 #include <stdio.h>
 
 static
-COMMLIB_API
-CommLibBoolean
-ListenerCallback(QuicConnection* Connection, void* Context) {
+
+    CommLibBoolean COMMLIB_API
+    ListenerCallback(QuicConnection* Connection, void* Context) {
     (void)Connection;
     (void)Context;
     printf("New Connection\n");
     return 0;
 }
 
-static COMMLIB_API
-void ListenerStoppedCallback(void* Context) {
+static void COMMLIB_API ListenerStoppedCallback(void* Context) {
     (void)Context;
     printf("Listener Stopped\n");
 }
@@ -33,7 +32,9 @@ int main() {
     Callbacks.NewConnectionCallback = ListenerCallback;
     Callbacks.StoppedCallback = ListenerStoppedCallback;
     Callbacks.Context = NULL;
-    Status = QC_CreateListener(Registration, 1360, (const uint8_t*)"frc", 3, Cert, CertLength, Password, 3, &Callbacks, &Listener);
+    Status =
+        QC_CreateListener(Registration, 1360, (const uint8_t*)"frc", 3, Cert,
+                          CertLength, Password, 3, &Callbacks, &Listener);
     printf("Listener Status %d\n", Status);
 
     Status = QC_StartListener(Listener);
