@@ -3,6 +3,22 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+static
+QUIC_CONN_API
+QuicConnBoolean
+ListenerCallback(QuicConnection* Connection, void* Context) {
+    (void)Connection;
+    (void)Context;
+    printf("New Connection\n");
+    return 0;
+}
+
+static QUIC_CONN_API
+void ListenerStoppedCallback(void* Context) {
+    (void)Context;
+    printf("Listener Stopped\n");
+}
+
 int main() {
     uint32_t CertLength = 0;
     const char* Password = NULL;
@@ -14,6 +30,22 @@ int main() {
 
     QuicListener* Listener = NULL;
     QuicListenerCallbacks Callbacks;
+    Callbacks.NewConnectionCallback = ListenerCallback;
+    Callbacks.StoppedCallback = ListenerStoppedCallback;
+    Callbacks.Context = NULL;
     Status = QC_CreateListener(Registration, 1360, (const uint8_t*)"frc", 3, Cert, CertLength, Password, 3, &Callbacks, &Listener);
     printf("Listener Status %d\n", Status);
+
+    Status = QC_StartListener(Listener);
+    printf("Listener Start Status %d\n", Status);
+
+    getchar();
+
+    QC_StopListener(Listener);
+
+    getchar();
+
+    QC_FreeListener(Listener);
+
+    QC_FreeRegistration(Registration);
 }

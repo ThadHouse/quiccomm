@@ -105,7 +105,7 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context, QUIC
     QuicListener* QListener = (QuicListener*)Context;
 
     if (Event->Type == QUIC_LISTENER_EVENT_NEW_CONNECTION) {
-        QuicConnection* NewConnection = malloc(sizeof(QuicConnection) + QListener->NumStreams);
+        QuicConnection* NewConnection = malloc(sizeof(QuicConnection) + (QListener->NumStreams * sizeof(QuicStream)));
         if (!NewConnection) {
             return QUIC_STATUS_OUT_OF_MEMORY;
         }
@@ -342,7 +342,7 @@ QuicConnStatus QC_CreateClientConnection(const QuicRegistration* Registration, c
     QUIC_SETTINGS Settings;
     QUIC_CREDENTIAL_CONFIG CredConfig;
     QuicStream* Stream;
-    QuicConnection* NewConnection = malloc(sizeof(QuicConnection) + NumStreams);
+    QuicConnection* NewConnection = malloc(sizeof(QuicConnection) + (NumStreams * sizeof(QuicStream)));
     if (!NewConnection) {
         return QUIC_STATUS_OUT_OF_MEMORY;
     }
