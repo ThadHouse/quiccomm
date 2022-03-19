@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -120,4 +121,8 @@ void COMMLIB_API HPTimer_Free(HPTimer* Thread) {
 uint64_t COMMLIB_API HPTimer_GetTimeUs(void) {
     uint64_t nanos = clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
     return nanos / NANOS_PER_USEC;
+}
+
+void COMMLIB_API HPTimer_SleepMs(uint32_t TimeMs) {
+    usleep(TimeMs * 1000);
 }
