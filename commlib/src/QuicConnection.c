@@ -12,6 +12,19 @@
 #include "msquic.h"
 #include <stdlib.h>
 
+#if _WIN32
+typedef volatile LONG QuicAtomicRefCount;
+#define QuicAtomicRefInit(X) (*X = 1)
+#define QuicAtomicAddRef(X) (InterlockedIncrement(X))
+#define QuicAtomicRelease(X) (InterlockedDecrementRelease(X) + 1)
+#else
+#include "stdatomic.h"
+typedef atomic_int QuicAtomicRefCount;
+#define QuicAtomicRefInit(X) (atomic_init(X, 1))
+#define QuicAtomicAddRef(X) (atomic_fetch_add(X, 1))
+#define QuicAtomicRelease(X) (atomic_fetch_sub(X, 1))
+#endif
+
 #ifndef UNREFERENCED_PARAMETER
 #define UNREFERENCED_PARAMETER(P) (void)(P)
 #endif
@@ -23,10 +36,40 @@ struct QuicRegistration {
     HQUIC Registration;
 };
 
-struct QuicListener {
-    const QuicRegistration* Registration;
-    HQUIC Listener;
+typedef struct QuicConfiguration {
+    const QUIC_API_TABLE* QuicApi;
     HQUIC Configuration;
+    QuicAtomicRefCount RefCount;
+} QuicConfiguration;
+
+static QuicConfiguration* QuicConfigurationAlloc(
+    const QuicRegistration* Registration) {
+    QuicConfiguration* Configuration = malloc(sizeof(QuicConfiguration));
+    if (!Configuration) {
+        return NULL;
+    }
+    memset(Configuration, 0, sizeof(*Configuration));
+    Configuration->QuicApi = Registration->QuicApi;
+    QuicAtomicRefInit(&Configuration->RefCount);
+    return Configuration;
+}
+
+static void QuicConfigurationAddRef(QuicConfiguration* Configuration) {
+    QuicAtomicAddRef(&Configuration->RefCount);
+}
+
+static void QuicConfigurationRelease(QuicConfiguration* Configuration) {
+    if (QuicAtomicRelease(&Configuration->RefCount) == 1) {
+        Configuration->QuicApi->ConfigurationClose(
+            Configuration->Configuration);
+        free(Configuration);
+    }
+}
+
+struct QuicListener {
+    const QUIC_API_TABLE* QuicApi;
+    HQUIC Listener;
+    QuicConfiguration* Configuration;
     QuicListenerCallbacks Callbacks;
     uint32_t NumStreams;
     uint16_t Port;
@@ -41,9 +84,9 @@ typedef struct QuicStream {
 } QuicStream;
 
 struct QuicConnection {
-    const QuicRegistration* Registration;
+    const QUIC_API_TABLE* QuicApi;
     HQUIC Connection;
-    HQUIC Configuration;
+    QuicConfiguration* Configuration;
     QuicConnectionCallbacks Callbacks;
     uint32_t NumStreams;
     uint32_t NumCurrentStreams;
@@ -117,19 +160,23 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context,
             return QUIC_STATUS_OUT_OF_MEMORY;
         }
         memset(NewConnection, 0,
-               sizeof(*NewConnection) + QListener->NumStreams);
+               sizeof(*NewConnection) +
+                   (QListener->NumStreams * sizeof(QuicStream)));
         NewConnection->NumStreams = QListener->NumStreams;
-        NewConnection->Registration = QListener->Registration;
+        NewConnection->QuicApi = QListener->QuicApi;
         NewConnection->Connection = Event->NEW_CONNECTION.Connection;
         for (uint32_t i = 0; i < NewConnection->NumStreams; i++) {
             NewConnection->Streams[i].Parent = NewConnection;
             NewConnection->Streams[i].Index = i;
         }
 
-        QUIC_STATUS Status =
-            QListener->Registration->QuicApi->ConnectionSetConfiguration(
-                NewConnection->Connection, QListener->Configuration);
+        NewConnection->Configuration = QListener->Configuration;
+        QuicConfigurationAddRef(NewConnection->Configuration);
+
+        QUIC_STATUS Status = QListener->QuicApi->ConnectionSetConfiguration(
+            NewConnection->Connection, QListener->Configuration->Configuration);
         if (QUIC_FAILED(Status)) {
+            QuicConfigurationRelease(QListener->Configuration);
             free(NewConnection);
             return Status;
         }
@@ -138,6 +185,7 @@ static QUIC_STATUS QUIC_API ListenerCallback(HQUIC Listener, void* Context,
             QListener->Callbacks.NewConnectionCallback(
                 NewConnection, QListener->Callbacks.Context);
         if (!KeepConnection) {
+            QuicConfigurationRelease(QListener->Configuration);
             free(NewConnection);
             return QUIC_STATUS_INVALID_STATE;
         }
@@ -159,11 +207,17 @@ CommLibStatus COMMLIB_API QC_CreateListener(
         return QUIC_STATUS_OUT_OF_MEMORY;
     }
     memset(NewListener, 0, sizeof(*NewListener));
-    NewListener->Registration = Registration;
+    NewListener->QuicApi = Registration->QuicApi;
     NewListener->NumStreams = NumStreams;
     NewListener->Port = Port;
     NewListener->AlpnLength = AlpnLength;
     memcpy(NewListener->Alpn, Alpn, AlpnLength);
+
+    NewListener->Configuration = QuicConfigurationAlloc(Registration);
+    if (!NewListener->Configuration) {
+        free(NewListener);
+        return QUIC_STATUS_OUT_OF_MEMORY;
+    }
 
     QUIC_CREDENTIAL_CONFIG CredConfig;
     memset(&CredConfig, 0, sizeof(CredConfig));
@@ -190,13 +244,13 @@ CommLibStatus COMMLIB_API QC_CreateListener(
 
     Status = Registration->QuicApi->ConfigurationOpen(
         Registration->Registration, &AlpnBuffer, 1, &Settings, sizeof(Settings),
-        NewListener, &NewListener->Configuration);
+        NewListener, &NewListener->Configuration->Configuration);
     if (QUIC_FAILED(Status)) {
         goto Exit;
     }
 
     Status = Registration->QuicApi->ConfigurationLoadCredential(
-        NewListener->Configuration, &CredConfig);
+        NewListener->Configuration->Configuration, &CredConfig);
     if (QUIC_FAILED(Status)) {
         goto Exit;
     }
@@ -217,12 +271,12 @@ CommLibStatus COMMLIB_API QC_CreateListener(
 Exit:
     if (NewListener) {
         if (NewListener->Listener) {
-            NewListener->Registration->QuicApi->ListenerClose(
-                NewListener->Listener);
+            NewListener->QuicApi->ListenerClose(NewListener->Listener);
         }
-        if (NewListener->Configuration) {
-            NewListener->Registration->QuicApi->ConfigurationClose(
-                NewListener->Configuration);
+        if (NewListener->Configuration->Configuration) {
+            QuicConfigurationRelease(NewListener->Configuration);
+        } else {
+            free(NewListener->Configuration);
         }
     }
 
@@ -236,21 +290,18 @@ CommLibStatus COMMLIB_API QC_StartListener(QuicListener* Listener) {
     QUIC_ADDR QuicAddr;
     memset(&QuicAddr, 0, sizeof(QuicAddr));
     QuicAddr.Ipv4.sin_port = BYTESWAPSHORT(Listener->Port);
-    return Listener->Registration->QuicApi->ListenerStart(
-        Listener->Listener, &AlpnBuffer, 1, &QuicAddr);
+    return Listener->QuicApi->ListenerStart(Listener->Listener, &AlpnBuffer, 1,
+                                            &QuicAddr);
 }
 
 void COMMLIB_API QC_StopListener(QuicListener* Listener) {
-    Listener->Registration->QuicApi->ListenerStop(Listener->Listener);
+    Listener->QuicApi->ListenerStop(Listener->Listener);
 }
 
 void COMMLIB_API QC_FreeListener(QuicListener* Listener) {
-    if (Listener) {
-        Listener->Registration->QuicApi->ListenerClose(Listener->Listener);
-        Listener->Registration->QuicApi->ConfigurationClose(
-            Listener->Configuration);
-        free(Listener);
-    }
+    Listener->QuicApi->ListenerClose(Listener->Listener);
+    QuicConfigurationRelease(Listener->Configuration);
+    free(Listener);
 }
 
 static void OnConnectionReady(QuicConnection* Connection) {
@@ -258,8 +309,7 @@ static void OnConnectionReady(QuicConnection* Connection) {
     Connection->Callbacks.ReadyCallback(Connection->Callbacks.Context);
     for (uint32_t i = 0; i < Connection->NumStreams; i++) {
         Stream = &Connection->Streams[i];
-        Connection->Registration->QuicApi->StreamReceiveSetEnabled(
-            Stream->Stream, TRUE);
+        Connection->QuicApi->StreamReceiveSetEnabled(Stream->Stream, TRUE);
     }
 }
 
@@ -295,7 +345,7 @@ static QUIC_STATUS QUIC_API StreamCallback(HQUIC Stream, void* Context,
             break;
         case QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE:
             // Shutdown connection if a stream ever shuts down.
-            QConnection->Registration->QuicApi->ConnectionShutdown(
+            QConnection->QuicApi->ConnectionShutdown(
                 QConnection->Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
             break;
         default:
@@ -338,7 +388,7 @@ static QUIC_STATUS QUIC_API ConnectionCallback(HQUIC Connection, void* Context,
             }
 
             BufferLength = sizeof(StreamId);
-            ParamStatus = QConnection->Registration->QuicApi->GetParam(
+            ParamStatus = QConnection->QuicApi->GetParam(
                 Event->PEER_STREAM_STARTED.Stream, QUIC_PARAM_STREAM_ID,
                 &BufferLength, &StreamId);
             if (QUIC_FAILED(ParamStatus)) {
@@ -356,7 +406,7 @@ static QUIC_STATUS QUIC_API ConnectionCallback(HQUIC Connection, void* Context,
 
             Stream = &QConnection->Streams[StreamId];
             Stream->Stream = Event->PEER_STREAM_STARTED.Stream;
-            QConnection->Registration->QuicApi->SetCallbackHandler(
+            QConnection->QuicApi->SetCallbackHandler(
                 Stream->Stream, (void*)StreamCallback, Stream);
             QConnection->NumCurrentStreams++;
 
@@ -388,13 +438,20 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
     if (!NewConnection) {
         return QUIC_STATUS_OUT_OF_MEMORY;
     }
-    memset(NewConnection, 0, sizeof(*NewConnection) + NumStreams);
+    memset(NewConnection, 0,
+           sizeof(*NewConnection) + (NumStreams * sizeof(QuicStream)));
     NewConnection->NumStreams = NumStreams;
-    NewConnection->Registration = Registration;
+    NewConnection->QuicApi = Registration->QuicApi;
     NewConnection->Callbacks = *Callbacks;
     for (uint32_t i = 0; i < NewConnection->NumStreams; i++) {
         NewConnection->Streams[i].Parent = NewConnection;
         NewConnection->Streams[i].Index = i;
+    }
+
+    NewConnection->Configuration = QuicConfigurationAlloc(Registration);
+    if (!NewConnection->Configuration) {
+        free(NewConnection);
+        return QUIC_STATUS_OUT_OF_MEMORY;
     }
 
     Settings.IsSetFlags = 0;
@@ -407,7 +464,7 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
 
     Status = Registration->QuicApi->ConfigurationOpen(
         Registration->Registration, &AlpnBuffer, 1, &Settings, sizeof(Settings),
-        NULL, &NewConnection->Configuration);
+        NULL, &NewConnection->Configuration->Configuration);
     if (QUIC_FAILED(Status)) {
         goto Exit;
     }
@@ -422,13 +479,13 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
     }
 
     Status = Registration->QuicApi->ConfigurationLoadCredential(
-        NewConnection->Configuration, &CredConfig);
+        NewConnection->Configuration->Configuration, &CredConfig);
     if (QUIC_FAILED(Status)) {
         // Likely schannel, try removing cipher suite
         CredConfig.Flags &= ~QUIC_CREDENTIAL_FLAG_SET_ALLOWED_CIPHER_SUITES;
         CredConfig.AllowedCipherSuites = 0;
         Status = Registration->QuicApi->ConfigurationLoadCredential(
-            NewConnection->Configuration, &CredConfig);
+            NewConnection->Configuration->Configuration, &CredConfig);
         if (QUIC_FAILED(Status)) {
             goto Exit;
         }
@@ -455,7 +512,7 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
     }
 
     Status = Registration->QuicApi->ConnectionStart(
-        NewConnection->Connection, NewConnection->Configuration,
+        NewConnection->Connection, NewConnection->Configuration->Configuration,
         QUIC_ADDRESS_FAMILY_UNSPEC, Host, Port);
     if (QUIC_FAILED(Status)) {
         goto Exit;
@@ -476,9 +533,10 @@ Exit:
         if (NewConnection->Connection) {
             Registration->QuicApi->ConnectionClose(NewConnection->Connection);
         }
-        if (NewConnection->Configuration) {
-            Registration->QuicApi->ConfigurationClose(
-                NewConnection->Configuration);
+        if (NewConnection->Configuration->Configuration) {
+            QuicConfigurationRelease(NewConnection->Configuration);
+        } else {
+            free(NewConnection->Configuration);
         }
         free(NewConnection);
     }
@@ -489,12 +547,12 @@ Exit:
 void COMMLIB_API QC_SetConnectionContext(QuicConnection* Connection,
                                          QuicConnectionCallbacks* Callbacks) {
     Connection->Callbacks = *Callbacks;
-    Connection->Registration->QuicApi->SetCallbackHandler(
+    Connection->QuicApi->SetCallbackHandler(
         Connection->Connection, (void*)ConnectionCallback, Connection);
 }
 
 void COMMLIB_API QC_ShutdownConnection(QuicConnection* Connection) {
-    Connection->Registration->QuicApi->ConnectionShutdown(
+    Connection->QuicApi->ConnectionShutdown(
         Connection->Connection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
 }
 
@@ -502,16 +560,11 @@ void COMMLIB_API QC_FreeConnection(QuicConnection* Connection) {
     if (Connection) {
         for (uint32_t i = 0; i < Connection->NumStreams; i++) {
             if (Connection->Streams[i].Stream) {
-                Connection->Registration->QuicApi->StreamClose(
-                    Connection->Streams[i].Stream);
+                Connection->QuicApi->StreamClose(Connection->Streams[i].Stream);
             }
         }
-        Connection->Registration->QuicApi->ConnectionClose(
-            Connection->Connection);
-        if (Connection->Configuration) {
-            Connection->Registration->QuicApi->ConfigurationClose(
-                Connection->Configuration);
-        }
+        Connection->QuicApi->ConnectionClose(Connection->Connection);
+        QuicConfigurationRelease(Connection->Configuration);
         free(Connection);
     }
 }

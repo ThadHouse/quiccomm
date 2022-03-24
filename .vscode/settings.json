@@ -93,6 +93,7 @@
         "msquic.h": "c",
         "msquic_winuser.h": "c",
         "stdatomic.h": "c",
-        "sched.h": "c"
+        "sched.h": "c",
+        "quic_platform.h": "c"
     }
 }
