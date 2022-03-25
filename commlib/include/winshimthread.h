@@ -36,18 +36,18 @@ int thrd_join(thrd_t thr, int* res);
 
 /* Mutex */
 
-typedef int mtx_t;
+typedef void* mtx_t;
 
-enum { mtx_plain = 0, mtx_recursive = 1, mtx_timed = 2 };
+enum { mtx_plain = 0, mtx_recursive = 1, /*mtx_timed = 2 */};
 
 int mtx_init(mtx_t* mutex, int type);
 
 int mtx_lock(mtx_t* mutex);
 
-struct timespec;
+// struct timespec;
 
-int mtx_timedlock(mtx_t* mutex,
-                  const struct timespec* time_point);
+// int mtx_timedlock(mtx_t* mutex,
+//                   const struct timespec* time_point);
 
 int mtx_trylock(mtx_t* mutex);
 
@@ -55,7 +55,7 @@ int mtx_unlock(mtx_t* mutex);
 
 void mtx_destroy(mtx_t* mutex);
 
-typedef int cnd_t;
+typedef void* cnd_t;
 
 int cnd_init(cnd_t* cond);
 
@@ -65,7 +65,7 @@ int cnd_broadcast(cnd_t* cond);
 
 int cnd_wait(cnd_t* cond, mtx_t* mutex);
 
-int cnd_timedwait(cnd_t* cont, mtx_t* mutex,
-                  const struct timespec* time_point);
+// int cnd_timedwait(cnd_t* cont, mtx_t* mutex,
+//                   const struct timespec* time_point);
 
 void cnd_destroy(cnd_t* cond);
