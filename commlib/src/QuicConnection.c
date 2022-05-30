@@ -473,7 +473,8 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
     CredConfig.Flags = QUIC_CREDENTIAL_FLAG_CLIENT |
                        QUIC_CREDENTIAL_FLAG_SET_ALLOWED_CIPHER_SUITES;
     CredConfig.AllowedCipherSuites =
-        QUIC_ALLOWED_CIPHER_SUITE_CHACHA20_POLY1305_SHA256;
+        QUIC_ALLOWED_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 |
+        QUIC_ALLOWED_CIPHER_SUITE_AES_128_GCM_SHA256;
     if (!ValidateCertificate) {
         CredConfig.Flags |= QUIC_CREDENTIAL_FLAG_NO_CERTIFICATE_VALIDATION;
     }
@@ -481,9 +482,8 @@ CommLibStatus COMMLIB_API QC_CreateClientConnection(
     Status = Registration->QuicApi->ConfigurationLoadCredential(
         NewConnection->Configuration->Configuration, &CredConfig);
     if (QUIC_FAILED(Status)) {
-        // Likely schannel, try removing cipher suite
-        CredConfig.Flags &= ~QUIC_CREDENTIAL_FLAG_SET_ALLOWED_CIPHER_SUITES;
-        CredConfig.AllowedCipherSuites = 0;
+        // Likely schannel, try removing chacha cipher suite
+        CredConfig.AllowedCipherSuites =  QUIC_ALLOWED_CIPHER_SUITE_AES_128_GCM_SHA256;
         Status = Registration->QuicApi->ConfigurationLoadCredential(
             NewConnection->Configuration->Configuration, &CredConfig);
         if (QUIC_FAILED(Status)) {
