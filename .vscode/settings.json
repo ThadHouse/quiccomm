@@ -94,6 +94,7 @@
         "msquic_winuser.h": "c",
         "stdatomic.h": "c",
         "sched.h": "c",
-        "quic_platform.h": "c"
+        "quic_platform.h": "c",
+        "shared_mutex": "c"
     }
 }

@@ -1,4 +1,7 @@
 #include "HPTimer.h"
+#ifdef _WIN32
+#pragma warning(disable : 5105)
+#endif
 #include "Windows.h"
 #include <process.h>
 
