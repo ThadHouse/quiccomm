@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include <functional>
-#include <wpi/span.h>
+#include <span>
 
 namespace qapi
 {
@@ -17,7 +17,7 @@ namespace qapi
         using ReadyFunction = std::function<void()>;
         using DisconnectedFunction = std::function<void()>;
         using DatagramReceiveFunction = std::function<void(const DataBuffer &)>;
-        using StreamReceiveFunction = std::function<void(wpi::span<const DataBuffer>)>;
+        using StreamReceiveFunction = std::function<void(std::span<const DataBuffer>)>;
 
         ReadyFunction Ready;
         DisconnectedFunction Disconnected;

@@ -17,11 +17,11 @@ static void DisconnectHandler() {
     DisconnectEvent.Set();
 }
 
-static void HandleStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers) {
+static void HandleStreamData(std::span<const QuicConnection::DataBuffer> Buffers) {
     (void)Buffers;
 }
 
-static void HandleControlStreamData(wpi::span<const QuicConnection::DataBuffer> Buffers) {
+static void HandleControlStreamData(std::span<const QuicConnection::DataBuffer> Buffers) {
     (void)Buffers;
 }
 

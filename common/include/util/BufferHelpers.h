@@ -7,6 +7,7 @@
 #endif
 
 #include <wpi/raw_ostream.h>
+#include <wpi/MathExtras.h>
 
 #include "util/SequenceNumber.h"
 

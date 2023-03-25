@@ -92,7 +92,7 @@ void *QuicConnection::GetConnectionHandle() noexcept
     return pImpl->Connection;
 }
 
-void QuicConnection::WriteDatagram(wpi::span<uint8_t> datagram)
+void QuicConnection::WriteDatagram(std::span<uint8_t> datagram)
 {
     QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + datagram.size());
     Buffer->Buffer = (uint8_t *)(Buffer + 1);
@@ -106,7 +106,7 @@ void QuicConnection::WriteDatagram(wpi::span<uint8_t> datagram)
     }
 }
 
-void QuicConnection::WriteStream(wpi::span<uint8_t> data)
+void QuicConnection::WriteStream(std::span<uint8_t> data)
 {
     QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + data.size());
     Buffer->Buffer = (uint8_t *)(Buffer + 1);
@@ -120,7 +120,7 @@ void QuicConnection::WriteStream(wpi::span<uint8_t> data)
     }
 }
 
-void QuicConnection::WriteControlStream(wpi::span<uint8_t> data)
+void QuicConnection::WriteControlStream(std::span<uint8_t> data)
 {
     QUIC_BUFFER *Buffer = (QUIC_BUFFER *)malloc(sizeof(QUIC_BUFFER) + data.size());
     Buffer->Buffer = (uint8_t *)(Buffer + 1);
@@ -492,7 +492,7 @@ QUIC_STATUS QuicConnection::Impl::ControlStreamCallback(QUIC_STREAM_EVENT *Event
     else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
     {
         const DataBuffer* Buffers = reinterpret_cast<const DataBuffer*>(Event->RECEIVE.Buffers);
-        Callbacks.ControlStreamReceived(wpi::span{Buffers, Event->RECEIVE.BufferCount});
+        Callbacks.ControlStreamReceived(std::span{Buffers, Event->RECEIVE.BufferCount});
     }
     else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
     {
@@ -514,7 +514,7 @@ QUIC_STATUS QuicConnection::Impl::StreamCallback(QUIC_STREAM_EVENT *Event)
     else if (Event->Type == QUIC_STREAM_EVENT_RECEIVE)
     {
         const DataBuffer* Buffers = reinterpret_cast<const DataBuffer*>(Event->RECEIVE.Buffers);
-        Callbacks.StreamReceived(wpi::span{Buffers, Event->RECEIVE.BufferCount});
+        Callbacks.StreamReceived(std::span{Buffers, Event->RECEIVE.BufferCount});
     }
     else if (Event->Type == QUIC_STREAM_EVENT_SEND_COMPLETE)
     {

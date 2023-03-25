@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include <wpi/span.h>
+#include <span>
 #include <string>
 #include <functional>
 #include "QuicCallbacks.h"
@@ -22,9 +22,9 @@ namespace qapi
 
         QuicConnection &operator=(const QuicConnection &) = delete;
 
-        void WriteDatagram(wpi::span<uint8_t> datagram);
-        void WriteStream(wpi::span<uint8_t> data);
-        void WriteControlStream(wpi::span<uint8_t> data);
+        void WriteDatagram(std::span<uint8_t> datagram);
+        void WriteStream(std::span<uint8_t> data);
+        void WriteControlStream(std::span<uint8_t> data);
 
         void *GetStreamHandle() noexcept;
         void *GetControlStreamHandle() noexcept;

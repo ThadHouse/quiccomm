@@ -64,7 +64,7 @@ void DriverStation::Impl::ThreadRun()
 {
     wpi::SmallVector<WPI_Handle, 64> Events;
     wpi::SmallVector<WPI_Handle, 64> SignaledEventsStorage;
-    wpi::span<WPI_Handle> SignaledEvents;
+    std::span<WPI_Handle> SignaledEvents;
 
     // First, wait for init or exit
     Events.emplace_back(EndThreadEvent);
@@ -362,7 +362,7 @@ void DriverStation::SendControlPacket() {
     tags::JoystickData jData{cJoyData};
     jData.WriteTag(svec);
 
-    wpi::span<uint8_t> Data{(uint8_t*)Vec.data(), Vec.size()};
+    std::span<uint8_t> Data{(uint8_t*)Vec.data(), Vec.size()};
 
     pImpl->CurrentConnection->WriteDatagram(Data);
 }

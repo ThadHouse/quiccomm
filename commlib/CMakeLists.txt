@@ -1,5 +1,5 @@
 set (SOURCES
-    src/QuicConnection.c
+    src/CQuicConnection.c
 )
 
 if (APPLE)

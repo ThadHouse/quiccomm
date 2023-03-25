@@ -72,7 +72,7 @@ void RobotComms::Impl::ThreadMain() {
 
     wpi::SmallVector<WPI_Handle, 64> Events;
     wpi::SmallVector<WPI_Handle, 64> SignaledEventsStorage;
-    wpi::span<WPI_Handle> SignaledEvents;
+    std::span<WPI_Handle> SignaledEvents;
 
     std::unique_ptr<QuicRobotConnection> RobotConnection;
 

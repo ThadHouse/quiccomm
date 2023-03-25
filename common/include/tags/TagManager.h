@@ -3,7 +3,7 @@
 #include <functional>
 #include <exception>
 
-#include <wpi/span.h>
+#include <span>
 #include <vector>
 #include <optional>
 
@@ -12,7 +12,7 @@ namespace tags
     struct TagData
     {
     public:
-        TagData(wpi::span<uint8_t> FBuffer, wpi::span<uint8_t> SBuffer) noexcept : FirstBuffer{FBuffer}, SecondBuffer{SBuffer} {};
+        TagData(std::span<uint8_t> FBuffer, std::span<uint8_t> SBuffer) noexcept : FirstBuffer{FBuffer}, SecondBuffer{SBuffer} {};
 
         template <typename T>
         bool Read(size_t Offset, T &Output) const noexcept
@@ -55,7 +55,7 @@ namespace tags
             return FirstBuffer.size() + SecondBuffer.size();
         }
 
-        wpi::span<uint8_t> CopyTo(wpi::span<uint8_t> Buffer) const noexcept
+        std::span<uint8_t> CopyTo(std::span<uint8_t> Buffer) const noexcept
         {
             size_t CopySize = (std::min)(Buffer.size(), Size());
             size_t FromFirstBuffer = (std::min)(CopySize, FirstBuffer.size());
@@ -88,8 +88,8 @@ namespace tags
         }
 
     private:
-        wpi::span<uint8_t> FirstBuffer;
-        wpi::span<uint8_t> SecondBuffer;
+        std::span<uint8_t> FirstBuffer;
+        std::span<uint8_t> SecondBuffer;
     };
 
     class TagManager
@@ -115,8 +115,8 @@ namespace tags
             this->UnknownTagHandler = TagHandler;
         }
 
-        void ReadTags(wpi::span<uint8_t> Datagram) const;
-        uint32_t TryReadTag(wpi::span<uint8_t> FirstBuffer, wpi::span<uint8_t> SecondBuffer) const;
+        void ReadTags(std::span<uint8_t> Datagram) const;
+        uint32_t TryReadTag(std::span<uint8_t> FirstBuffer, std::span<uint8_t> SecondBuffer) const;
 
     private:
         std::vector<TagFunction> TagMap;

@@ -1,7 +1,7 @@
 #include "dscomm.h"
 #include "CPThread.h"
 #include "HPTimer.h"
-#include "QuicConnection.h"
+#include "CQuicConnection.h"
 #include "msquic.h"
 
 struct DSComm {
@@ -13,6 +13,7 @@ static void DSThread(void* Context) {
     (void)Context;
     QuicRegistration* Registration;
     CommLibStatus Status = QC_GetRegistration("Netcomm", TRUE, &Registration);
+    (void)Status;
 }
 
 CommLibStatus COMMLIB_API DSComm_Initialize(DSComm** Comm) {

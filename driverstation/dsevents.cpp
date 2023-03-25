@@ -41,7 +41,7 @@ void DsEvents::DatagramReceive(const qapi::DataBuffer &Datagram) noexcept
     (void)Datagram;
 }
 
-void DsEvents::StreamReceive(wpi::span<const qapi::DataBuffer> Buffers) noexcept
+void DsEvents::StreamReceive(std::span<const qapi::DataBuffer> Buffers) noexcept
 {
     (void)Buffers;
 }

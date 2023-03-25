@@ -4,7 +4,7 @@ using namespace tags;
 
 #define BSwap(x) ((uint16_t)((((x)&0x00ff) << 8) | (((x)&0xff00) >> 8)))
 
-void TagManager::ReadTags(wpi::span<uint8_t> Datagram) const
+void TagManager::ReadTags(std::span<uint8_t> Datagram) const
 {
 
     uint32_t ReadCount = 0;
@@ -14,7 +14,7 @@ void TagManager::ReadTags(wpi::span<uint8_t> Datagram) const
     }
 }
 
-uint32_t TagManager::TryReadTag(wpi::span<uint8_t> FirstBuffer, wpi::span<uint8_t> SecondBuffer) const
+uint32_t TagManager::TryReadTag(std::span<uint8_t> FirstBuffer, std::span<uint8_t> SecondBuffer) const
 {
     TagData ReadBuffer{FirstBuffer, SecondBuffer};
     uint16_t TagSize;

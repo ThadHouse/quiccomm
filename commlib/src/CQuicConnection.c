@@ -1,4 +1,4 @@
-#include "QuicConnection.h"
+#include "CQuicConnection.h"
 #ifdef _WIN32
 //
 // The conformant preprocessor along with the newest SDK throws this warning for

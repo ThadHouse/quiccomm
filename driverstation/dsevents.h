@@ -26,7 +26,7 @@ namespace ds
 
     private:
         void DatagramReceive(const qapi::DataBuffer& Datagram) noexcept;
-        void StreamReceive(wpi::span<const qapi::DataBuffer> Buffers) noexcept;
+        void StreamReceive(std::span<const qapi::DataBuffer> Buffers) noexcept;
 
         DS_EventCallbacks DsEventCallbacks;
         wpi::mutex DsEventMutex;
