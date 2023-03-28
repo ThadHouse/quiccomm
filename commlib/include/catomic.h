@@ -10,18 +10,18 @@
 #include <stdatomic.h>
 #endif
 
-typedef volatile int atomic_bool;
+// typedef volatile int atomic_bool;
 
-#define atomic_init(obj, value) \
-    do {\
-      *(obj) = value; \
-    } while (0)
+// #define atomic_init(obj, value) \
+//     do {\
+//       *(obj) = value; \
+//     } while (0)
 
-#define atomic_store(obj, value) \
-    do {\
-      *(obj) = value; \
-      MemoryBarrier(); \
-    } while (0)
+// #define atomic_store(obj, value) \
+//     do {\
+//       *(obj) = value; \
+//       MemoryBarrier(); \
+//     } while (0)
 
-#define atomic_load(obj) \
-    (MemoryBarrier(), *(obj))
+// #define atomic_load(obj) \
+//     (MemoryBarrier(), *(obj))

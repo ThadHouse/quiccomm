@@ -25,6 +25,7 @@ option(QUIC_HIGH_RES_TIMERS "Configure the system to use high resolution timers"
 option(QUIC_SHARED_EC "Use shared execution contexts between QUIC and UDP" OFF)
 add_subdirectory(msquic)
 target_compile_features(inc INTERFACE cxx_std_17)
+target_compile_features(inc INTERFACE c_std_17)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(WITH_NTCORE "Include ntcore" OFF)
@@ -41,6 +42,14 @@ add_subdirectory(allwpilib)
 
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
+if (WIN32)
+add_library(c11threads STATIC submodules/c11threads/c11threads_win32.c)
+else()
+add_library(c11threads INTERFACE)
+endif()
+target_compile_features(c11threads INTERFACE c_std_17)
+target_include_directories(c11threads INTERFACE submodules/c11threads)
+
 add_subdirectory(cert)
 add_subdirectory(commlib)
 
@@ -51,6 +60,6 @@ add_subdirectory(common)
 #add_subdirectory(ds)
 #add_subdirectory(dsapp)
 #add_subdirectory(driverstation)
-#add_subdirectory(netcomm)
+add_subdirectory(netcomm)
 #add_subdirectory(netcommapp)
 #add_subdirectory(netcommdaemon)

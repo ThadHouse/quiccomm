@@ -95,6 +95,13 @@
         "stdatomic.h": "c",
         "sched.h": "c",
         "quic_platform.h": "c",
-        "shared_mutex": "c"
+        "shared_mutex": "c",
+        "__std_stream": "cpp",
+        "concepts": "cpp",
+        "csignal": "cpp",
+        "numbers": "cpp",
+        "regex": "cpp",
+        "scoped_allocator": "cpp",
+        "valarray": "cpp"
     }
 }

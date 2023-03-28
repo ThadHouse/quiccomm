@@ -1,19 +1,20 @@
 #include "dscomm.h"
-#include "CPThread.h"
+#include <catomic.h>
+#include <c11threads.h>
 #include "HPTimer.h"
 #include "CQuicConnection.h"
 #include "msquic.h"
 
 struct DSComm {
-    CPThread* CommThread;
-
+    thrd_t CommThread;
 };
 
-static void DSThread(void* Context) {
+static int DSThread(void* Context) {
     (void)Context;
     QuicRegistration* Registration;
     CommLibStatus Status = QC_GetRegistration("Netcomm", TRUE, &Registration);
     (void)Status;
+    return 0;
 }
 
 CommLibStatus COMMLIB_API DSComm_Initialize(DSComm** Comm) {
@@ -24,7 +25,7 @@ CommLibStatus COMMLIB_API DSComm_Initialize(DSComm** Comm) {
     }
     memset(NewComm, 0, sizeof(*NewComm));
 
-    Status = CPThread_Initialize(DSThread, NewComm, &NewComm->CommThread);
+    Status = thrd_create(&NewComm->CommThread, DSThread, NewComm);
     if (COMMLIB_FAILED(Status)) {
         goto Exit;
     }
@@ -36,7 +37,7 @@ CommLibStatus COMMLIB_API DSComm_Initialize(DSComm** Comm) {
 Exit:
     if (NewComm) {
         if (NewComm->CommThread) {
-            CPThread_Free(NewComm->CommThread);
+            thrd_join(NewComm->CommThread, NULL);
         }
         free(NewComm);
     }
@@ -44,6 +45,7 @@ Exit:
 }
 
 void COMMLIB_API DSComm_Free(DSComm* Comm) {
-    CPThread_Free(Comm->CommThread);
+    thrd_join(Comm->CommThread, NULL);
     free(Comm);
 }
+`

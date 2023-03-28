@@ -25,10 +25,12 @@ namespace qapi
         void WriteDatagram(std::span<uint8_t> datagram);
         void WriteStream(std::span<uint8_t> data);
         void WriteControlStream(std::span<uint8_t> data);
+        void WriteConsoleStream(std::string_view data);
 
         void *GetStreamHandle() noexcept;
         void *GetControlStreamHandle() noexcept;
         void *GetConnectionHandle() noexcept;
+        void *GetConsoleStreamHandle() noexcept;
 
         // Only valid on client
         void Disconnect();

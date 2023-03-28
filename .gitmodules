@@ -4,3 +4,6 @@
 [submodule "allwpilib"]
 	path = allwpilib
 	url = https://github.com/wpilibsuite/allwpilib
+[submodule "submodules/c11threads"]
+	path = submodules/c11threads
+	url = https://github.com/jtsiomb/c11threads

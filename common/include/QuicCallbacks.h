@@ -24,5 +24,6 @@ namespace qapi
         DatagramReceiveFunction DatagramReceived;
         StreamReceiveFunction StreamReceived;
         StreamReceiveFunction ControlStreamReceived;
+        StreamReceiveFunction ConsoleStreamReceived;
     };
 }
